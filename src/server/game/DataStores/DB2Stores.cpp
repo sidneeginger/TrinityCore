@@ -82,6 +82,9 @@ DB2Storage<MountCapabilityEntry>                sMountCapabilityStore("MountCapa
 DB2Storage<MountEntry>                          sMountStore("Mount.db2", MountFormat, HOTFIX_SEL_MOUNT);
 DB2Storage<MountTypeXCapabilityEntry>           sMountTypeXCapabilityStore("MountTypeXCapability.db2", MountTypeXCapabilityFormat, HOTFIX_SEL_MOUNT_TYPE_X_CAPABILITY);
 DB2Storage<NameGenEntry>                        sNameGenStore("NameGen.db2", NameGenFormat, HOTFIX_SEL_NAME_GEN);
+DB2Storage<NamesProfanityEntry>                 sNamesProfanityStore("NamesProfanity.db2", NamesProfanityFormat, HOTFIX_SEL_NAMES_PROFANITY);
+DB2Storage<NamesReservedEntry>                  sNamesReservedStore("NamesReserved.db2", NamesReservedFormat, HOTFIX_SEL_NAMES_RESERVED);
+DB2Storage<NamesReservedLocaleEntry>            sNamesReservedLocaleStore("NamesReservedLocale.db2", NamesReservedLocaleFormat, HOTFIX_SEL_NAMES_RESERVED_LOCALE);
 DB2Storage<OverrideSpellDataEntry>              sOverrideSpellDataStore("OverrideSpellData.db2", OverrideSpellDataFormat, HOTFIX_SEL_OVERRIDE_SPELL_DATA);
 DB2Storage<PhaseXPhaseGroupEntry>               sPhaseXPhaseGroupStore("PhaseXPhaseGroup.db2", PhaseXPhaseGroupFormat, HOTFIX_SEL_PHASE_X_PHASE_GROUP);
 DB2Storage<QuestMoneyRewardEntry>               sQuestMoneyRewardStore("QuestMoneyReward.db2", QuestMoneyRewardFormat, HOTFIX_SEL_QUEST_MONEY_REWARD);
@@ -131,7 +134,7 @@ typedef std::list<std::string> DB2StoreProblemList;
 uint32 DB2FilesCount = 0;
 
 template<class T>
-inline void LoadDB2(uint32& availableDb2Locales, DB2StoreProblemList& errlist, DB2Manager::StorageMap& stores, DB2Storage<T>* storage, std::string const& db2_path)
+inline void LoadDB2(uint32& availableDb2Locales, DB2StoreProblemList& errlist, DB2Manager::StorageMap& stores, DB2Storage<T>* storage, std::string const& db2Path, uint32 defaultLocale)
 {
     // compatibility format and C++ structure sizes
     ASSERT(DB2FileLoader::GetFormatRecordSize(storage->GetFormat()) == sizeof(T),
@@ -140,17 +143,17 @@ inline void LoadDB2(uint32& availableDb2Locales, DB2StoreProblemList& errlist, D
 
     ++DB2FilesCount;
 
-    if (storage->Load(db2_path, uint32(sWorld->GetDefaultDbcLocale())))
+    if (storage->Load(db2Path + localeNames[defaultLocale] + '/', defaultLocale))
     {
         storage->LoadFromDB();
 
         for (uint32 i = 0; i < TOTAL_LOCALES; ++i)
         {
-            if (uint32(sWorld->GetDefaultDbcLocale()) == i)
+            if (defaultLocale == i)
                 continue;
 
             if (availableDb2Locales & (1 << i))
-                if (!storage->LoadStringsFrom((db2_path + localeNames[i] + '/'), i))
+                if (!storage->LoadStringsFrom((db2Path + localeNames[i] + '/'), i))
                     availableDb2Locales &= ~(1 << i);             // mark as not available for speedup next checks
 
             storage->LoadStringsFromDB(i);
@@ -159,7 +162,7 @@ inline void LoadDB2(uint32& availableDb2Locales, DB2StoreProblemList& errlist, D
     else
     {
         // sort problematic db2 to (1) non compatible and (2) nonexistent
-        if (FILE* f = fopen((db2_path + storage->GetFileName()).c_str(), "rb"))
+        if (FILE* f = fopen((db2Path + storage->GetFileName()).c_str(), "rb"))
         {
             std::ostringstream stream;
             stream << storage->GetFileName() << " exists, and has " << storage->GetFieldCount() << " field(s) (expected " << strlen(storage->GetFormat())
@@ -175,16 +178,16 @@ inline void LoadDB2(uint32& availableDb2Locales, DB2StoreProblemList& errlist, D
     stores[storage->GetHash()] = storage;
 }
 
-void DB2Manager::LoadStores(std::string const& dataPath)
+void DB2Manager::LoadStores(std::string const& dataPath, uint32 defaultLocale)
 {
     uint32 oldMSTime = getMSTime();
 
-    std::string db2Path = GetDBCLocaleFolder(dataPath);
+    std::string db2Path = dataPath + "dbc/";
 
     DB2StoreProblemList bad_db2_files;
     uint32 availableDb2Locales = 0xFF;
 
-#define LOAD_DB2(store) LoadDB2(availableDb2Locales, bad_db2_files, _stores, &store, db2Path)
+#define LOAD_DB2(store) LoadDB2(availableDb2Locales, bad_db2_files, _stores, &store, db2Path, defaultLocale)
 
     LOAD_DB2(sAreaGroupMemberStore);
     LOAD_DB2(sAreaGroupStore);
@@ -244,6 +247,9 @@ void DB2Manager::LoadStores(std::string const& dataPath)
     LOAD_DB2(sMountStore);
     LOAD_DB2(sMountTypeXCapabilityStore);
     LOAD_DB2(sNameGenStore);
+    LOAD_DB2(sNamesProfanityStore);
+    LOAD_DB2(sNamesReservedStore);
+    LOAD_DB2(sNamesReservedLocaleStore);
     LOAD_DB2(sOverrideSpellDataStore);
     LOAD_DB2(sPhaseXPhaseGroupStore);
     LOAD_DB2(sQuestMoneyRewardStore);
@@ -348,6 +354,27 @@ void DB2Manager::LoadStores(std::string const& dataPath)
 
     for (NameGenEntry const* entry : sNameGenStore)
         _nameGenData[entry->Race][entry->Sex].push_back(entry);
+
+    for (NamesProfanityEntry const* namesProfanity : sNamesProfanityStore)
+    {
+        ASSERT(namesProfanity->Language < TOTAL_LOCALES || namesProfanity->Language == -1);
+        if (namesProfanity->Language != -1)
+            _nameValidators[namesProfanity->Language].emplace_back(namesProfanity->Name, boost::regex::perl | boost::regex::icase | boost::regex::optimize);
+        else
+            for (uint32 i = 0; i < TOTAL_LOCALES; ++i)
+                _nameValidators[i].emplace_back(namesProfanity->Name, boost::regex::perl | boost::regex::icase | boost::regex::optimize);
+    }
+
+    for (NamesReservedEntry const* namesReserved : sNamesReservedStore)
+        _nameValidators[TOTAL_LOCALES].emplace_back(namesReserved->Name, boost::regex::perl | boost::regex::icase | boost::regex::optimize);
+
+    for (NamesReservedLocaleEntry const* namesReserved : sNamesReservedLocaleStore)
+    {
+        ASSERT(!(namesReserved->LocaleMask & ~((1 << TOTAL_LOCALES) - 1)));
+        for (uint32 i = 0; i < TOTAL_LOCALES; ++i)
+            if (namesReserved->LocaleMask & (1 << i))
+                _nameValidators[i].emplace_back(namesReserved->Name, boost::regex::perl | boost::regex::icase | boost::regex::optimize);
+    }
 
     for (PhaseXPhaseGroupEntry const* group : sPhaseXPhaseGroupStore)
         if (PhaseEntry const* phase = sPhaseStore.LookupEntry(group->PhaseID))
@@ -474,7 +501,7 @@ void DB2Manager::LoadStores(std::string const& dataPath)
     // error checks
     if (bad_db2_files.size() >= DB2FilesCount)
     {
-        TC_LOG_ERROR("misc", "\nIncorrect DataDir value in worldserver.conf or ALL required *.db2 files (%d) not found by path: %sdb2", DB2FilesCount, dataPath.c_str());
+        TC_LOG_ERROR("misc", "\nIncorrect DataDir value in worldserver.conf or ALL required *.db2 files (%d) not found by path: %sdbc/%s/", DB2FilesCount, dataPath.c_str(), localeNames[defaultLocale]);
         exit(1);
     }
     else if (!bad_db2_files.empty())
@@ -709,6 +736,20 @@ DB2Manager::MountTypeXCapabilitySet const* DB2Manager::GetMountCapabilities(uint
         return &itr->second;
 
     return nullptr;
+}
+
+ResponseCodes DB2Manager::ValidateName(std::string const& name, LocaleConstant locale) const
+{
+    for (boost::regex const& regex : _nameValidators[locale])
+        if (boost::regex_search(name, regex))
+            return CHAR_NAME_PROFANE;
+
+    // regexes at TOTAL_LOCALES are loaded from NamesReserved which is not locale specific
+    for (boost::regex const& regex : _nameValidators[TOTAL_LOCALES])
+        if (boost::regex_search(name, regex))
+            return CHAR_NAME_RESERVED;
+
+    return CHAR_NAME_SUCCESS;
 }
 
 std::vector<QuestPackageItemEntry const*> const* DB2Manager::GetQuestPackageItems(uint32 questPackageID) const
