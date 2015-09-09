@@ -542,6 +542,12 @@ enum PlayerFlags
     PLAYER_FLAGS_UNK31                  = 0x80000000
 };
 
+enum PlayerFlagsEx
+{
+    PLAYER_FLAGS_EX_REAGENT_BANK_UNLOCKED   = 0x0001,
+    PLAYER_FLAGS_EX_MERCENARY_MODE          = 0x0002
+};
+
 enum PlayerLocalFlags
 {
     PLAYER_LOCAL_FLAG_TRACK_STEALTHED               = 0x00000002,
@@ -2113,8 +2119,8 @@ class Player : public Unit, public GridObject<Player>
         void SetLastRuneGraceTimer(uint8 index, uint32 timer) { m_lastRuneGraceTimers[index] = timer; }
         void UpdateAllRunesRegen();
 
-        ObjectGuid GetLootGUID() const { return m_lootGuid; }
-        void SetLootGUID(ObjectGuid guid) { m_lootGuid = guid; }
+        ObjectGuid const& GetLootGUID() const { return GetGuidValue(PLAYER_LOOT_TARGET_GUID); }
+        void SetLootGUID(ObjectGuid const& guid) { SetGuidValue(PLAYER_LOOT_TARGET_GUID, guid); }
 
         void RemovedInsignia(Player* looterPlr);
 
@@ -2756,7 +2762,6 @@ class Player : public Unit, public GridObject<Player>
         time_t m_lastHonorUpdateTime;
 
         void outDebugValues() const;
-        ObjectGuid m_lootGuid;
 
         uint32 m_team;
         uint32 m_nextSave;
