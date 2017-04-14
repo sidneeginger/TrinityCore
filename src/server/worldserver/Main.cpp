@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -21,8 +21,6 @@
 /// \file
 
 #include "Common.h"
-#include "Commands.h"
-#include "ZmqContext.h"
 #include "DatabaseEnv.h"
 #include "AsyncAcceptor.h"
 #include "RASession.h"
@@ -35,24 +33,30 @@
 #include "InstanceSaveMgr.h"
 #include "ObjectAccessor.h"
 #include "ScriptMgr.h"
+#include "ScriptReloadMgr.h"
+#include "ScriptLoader.h"
 #include "OutdoorPvP/OutdoorPvPMgr.h"
 #include "BattlegroundMgr.h"
 #include "TCSoap.h"
 #include "CliRunnable.h"
+#include "Banner.h"
 #include "GitRevision.h"
 #include "WorldSocket.h"
 #include "WorldSocketMgr.h"
-#include "BattlenetServerManager.h"
-#include "Realm/Realm.h"
+#include "RealmList.h"
 #include "DatabaseLoader.h"
 #include "AppenderDB.h"
+#include "Metric.h"
 #include <openssl/opensslv.h>
 #include <openssl/crypto.h>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/deadline_timer.hpp>
+#include <boost/filesystem/path.hpp>
 #include <boost/program_options.hpp>
+#include <google/protobuf/stubs/common.h>
 
 using namespace boost::program_options;
+namespace fs = boost::filesystem;
 
 #ifndef _TRINITY_CORE_CONFIG
     #define _TRINITY_CORE_CONFIG  "worldserver.conf"
@@ -80,13 +84,6 @@ uint32 _worldLoopCounter(0);
 uint32 _lastChangeMsTime(0);
 uint32 _maxCoreStuckTimeInMs(0);
 
-WorldDatabaseWorkerPool WorldDatabase;                      ///< Accessor to the world database
-CharacterDatabaseWorkerPool CharacterDatabase;              ///< Accessor to the character database
-HotfixDatabaseWorkerPool HotfixDatabase;                    ///< Accessor to the hotfix database
-LoginDatabaseWorkerPool LoginDatabase;                      ///< Accessor to the realm/login database
-Battlenet::RealmHandle realmHandle;                         ///< Id of the realm
-Realm realm;
-
 void SignalHandler(const boost::system::error_code& error, int signalNumber);
 void FreezeDetectorHandler(const boost::system::error_code& error);
 AsyncAcceptor* StartRaSocketAcceptor(boost::asio::io_service& ioService);
@@ -97,18 +94,22 @@ void ClearOnlineAccounts();
 void ShutdownCLIThread(std::thread* cliThread);
 void ShutdownThreadPool(std::vector<std::thread>& threadPool);
 bool LoadRealmInfo();
-variables_map GetConsoleArguments(int argc, char** argv, std::string& cfg_file, std::string& cfg_service);
+variables_map GetConsoleArguments(int argc, char** argv, fs::path& configFile, std::string& cfg_service);
 
 /// Launch the Trinity server
 extern int main(int argc, char** argv)
 {
-    std::string configFile = _TRINITY_CORE_CONFIG;
+    signal(SIGABRT, &Trinity::AbortHandler);
+
+    auto configFile = fs::absolute(_TRINITY_CORE_CONFIG);
     std::string configService;
 
     auto vm = GetConsoleArguments(argc, argv, configFile, configService);
     // exit if help or version is enabled
     if (vm.count("help") || vm.count("version"))
         return 0;
+
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #ifdef _WIN32
     if (configService.compare("install") == 0)
@@ -120,7 +121,9 @@ extern int main(int argc, char** argv)
 #endif
 
     std::string configError;
-    if (!sConfigMgr->LoadInitial(configFile, configError))
+    if (!sConfigMgr->LoadInitial(configFile.generic_string(),
+                                 std::vector<std::string>(argv, argv + argc),
+                                 configError))
     {
         printf("Error in config file: %s\n", configError.c_str());
         return 1;
@@ -130,20 +133,18 @@ extern int main(int argc, char** argv)
     // If logs are supposed to be handled async then we need to pass the io_service into the Log singleton
     sLog->Initialize(sConfigMgr->GetBoolDefault("Log.Async.Enable", false) ? &_ioService : nullptr);
 
-    TC_LOG_INFO("server.worldserver", "%s (worldserver-daemon)", GitRevision::GetFullVersion());
-    TC_LOG_INFO("server.worldserver", "<Ctrl-C> to stop.\n");
-    TC_LOG_INFO("server.worldserver", " ______                       __");
-    TC_LOG_INFO("server.worldserver", "/\\__  _\\       __          __/\\ \\__");
-    TC_LOG_INFO("server.worldserver", "\\/_/\\ \\/ _ __ /\\_\\    ___ /\\_\\ \\, _\\  __  __");
-    TC_LOG_INFO("server.worldserver", "   \\ \\ \\/\\`'__\\/\\ \\ /' _ `\\/\\ \\ \\ \\/ /\\ \\/\\ \\");
-    TC_LOG_INFO("server.worldserver", "    \\ \\ \\ \\ \\/ \\ \\ \\/\\ \\/\\ \\ \\ \\ \\ \\_\\ \\ \\_\\ \\");
-    TC_LOG_INFO("server.worldserver", "     \\ \\_\\ \\_\\  \\ \\_\\ \\_\\ \\_\\ \\_\\ \\__\\\\/`____ \\");
-    TC_LOG_INFO("server.worldserver", "      \\/_/\\/_/   \\/_/\\/_/\\/_/\\/_/\\/__/ `/___/> \\");
-    TC_LOG_INFO("server.worldserver", "                                 C O R E  /\\___/");
-    TC_LOG_INFO("server.worldserver", "http://TrinityCore.org                    \\/__/\n");
-    TC_LOG_INFO("server.worldserver", "Using configuration file %s.", configFile.c_str());
-    TC_LOG_INFO("server.worldserver", "Using SSL version: %s (library: %s)", OPENSSL_VERSION_TEXT, SSLeay_version(SSLEAY_VERSION));
-    TC_LOG_INFO("server.worldserver", "Using Boost version: %i.%i.%i", BOOST_VERSION / 100000, BOOST_VERSION / 100 % 1000, BOOST_VERSION % 100);
+    Trinity::Banner::Show("worldserver-daemon",
+        [](char const* text)
+        {
+            TC_LOG_INFO("server.worldserver", "%s", text);
+        },
+        []()
+        {
+            TC_LOG_INFO("server.worldserver", "Using configuration file %s.", sConfigMgr->GetFilename().c_str());
+            TC_LOG_INFO("server.worldserver", "Using SSL version: %s (library: %s)", OPENSSL_VERSION_TEXT, SSLeay_version(SSLEAY_VERSION));
+            TC_LOG_INFO("server.worldserver", "Using Boost version: %i.%i.%i", BOOST_VERSION / 100000, BOOST_VERSION / 100 % 1000, BOOST_VERSION % 100);
+        }
+    );
 
     OpenSSLCrypto::threadsSetup();
 
@@ -167,7 +168,7 @@ extern int main(int argc, char** argv)
 
     // Set signal handlers (this must be done before starting io_service threads, because otherwise they would unblock and exit)
     boost::asio::signal_set signals(_ioService, SIGINT, SIGTERM);
-#if PLATFORM == PLATFORM_WINDOWS
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
     signals.add(SIGBREAK);
 #endif
     signals.async_wait(SignalHandler);
@@ -193,11 +194,21 @@ extern int main(int argc, char** argv)
     }
 
     // Set server offline (not connectable)
-    LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = (flag & ~%u) | %u WHERE id = '%d'", REALM_FLAG_OFFLINE, REALM_FLAG_INVALID, realmHandle.Index);
+    LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | %u WHERE id = '%d'", REALM_FLAG_OFFLINE, realm.Id.Realm);
+
+    sRealmList->Initialize(_ioService, sConfigMgr->GetIntDefault("RealmsStateUpdateDelay", 10));
 
     LoadRealmInfo();
 
+    sMetric->Initialize(realm.Name, _ioService, []()
+    {
+        TC_METRIC_VALUE("online_players", sWorld->GetPlayerCount());
+    });
+
+    TC_METRIC_EVENT("events", "Worldserver started", "");
+
     // Initialize the World
+    sScriptMgr->SetScriptLoader(AddScripts);
     sWorld->SetInitialWorldSettings();
 
     // Launch CliRunnable thread
@@ -227,12 +238,20 @@ extern int main(int argc, char** argv)
     uint16 worldPort = uint16(sWorld->getIntConfig(CONFIG_PORT_WORLD));
     std::string worldListener = sConfigMgr->GetStringDefault("BindIP", "0.0.0.0");
 
-    sWorldSocketMgr.StartNetwork(_ioService, worldListener, worldPort);
+    int networkThreads = sConfigMgr->GetIntDefault("Network.Threads", 1);
+
+    if (networkThreads <= 0)
+    {
+        TC_LOG_ERROR("server.worldserver", "Network.Threads must be greater than 0");
+        return false;
+    }
+
+    sWorldSocketMgr.StartNetwork(_ioService, worldListener, worldPort, networkThreads);
 
     // Set server online (allow connecting now)
-    LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag & ~%u, population = 0 WHERE id = '%u'", REALM_FLAG_INVALID, realmHandle.Index);
+    LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag & ~%u, population = 0 WHERE id = '%u'", REALM_FLAG_OFFLINE, realm.Id.Realm);
     realm.PopulationLevel = 0.0f;
-    realm.Flags = RealmFlags(realm.Flags & ~uint32(REALM_FLAG_INVALID));
+    realm.Flags = RealmFlags(realm.Flags & ~uint32(REALM_FLAG_OFFLINE));
 
     // Start the freeze check callback cycle in 5 seconds (cycle itself is 1 sec)
     if (int coreStuckTime = sConfigMgr->GetIntDefault("MaxCoreStuckTime", 0))
@@ -243,10 +262,6 @@ extern int main(int argc, char** argv)
         TC_LOG_INFO("server.worldserver", "Starting up anti-freeze thread (%u seconds max stuck time)...", coreStuckTime);
     }
 
-    sIpcContext->Initialize();
-
-    sBattlenetServer.InitializeConnection();
-
     TC_LOG_INFO("server.worldserver", "%s (worldserver-daemon) ready...", GitRevision::GetFullVersion());
 
     sScriptMgr->OnStartup();
@@ -256,11 +271,9 @@ extern int main(int argc, char** argv)
     // Shutdown starts here
     ShutdownThreadPool(threadPool);
 
+    sLog->SetSynchronous();
+
     sScriptMgr->OnShutdown();
-
-    sIpcContext->Close();
-
-    sBattlenetServer.CloseConnection();
 
     sWorld->KickAll();                                       // save and kick all players
     sWorld->UpdateSessions(1);                             // real players unload required UpdateSessions call
@@ -273,11 +286,12 @@ extern int main(int argc, char** argv)
     sInstanceSaveMgr->Unload();
     sOutdoorPvPMgr->Die();                    // unload it before MapManager
     sMapMgr->UnloadAll();                     // unload all grids (including locked in memory)
-    sObjectAccessor->UnloadAll();             // unload 'i_player2corpse' storage and remove from world
     sScriptMgr->Unload();
+    sScriptReloadMgr->Unload();
 
     // set server offline
-    LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | %u WHERE id = '%d'", REALM_FLAG_OFFLINE, realmHandle.Index);
+    LoginDatabase.DirectPExecute("UPDATE realmlist SET flag = flag | %u WHERE id = '%d'", REALM_FLAG_OFFLINE, realm.Id.Realm);
+    sRealmList->Close();
 
     // Clean up threads if any
     if (soapThread != nullptr)
@@ -293,11 +307,16 @@ extern int main(int argc, char** argv)
 
     StopDB();
 
+    TC_METRIC_EVENT("events", "Worldserver shutdown", "");
+    sMetric->ForceSend();
+
     TC_LOG_INFO("server.worldserver", "Halting process...");
 
     ShutdownCLIThread(cliThread);
 
     OpenSSLCrypto::threadsCleanup();
+
+    google::protobuf::ShutdownProtobufLibrary();
 
     // 0 - normal shutdown
     // 1 - shutdown at error
@@ -441,7 +460,7 @@ void FreezeDetectorHandler(const boost::system::error_code& error)
         else if (getMSTimeDiff(_lastChangeMsTime, curtime) > _maxCoreStuckTimeInMs)
         {
             TC_LOG_ERROR("server.worldserver", "World Thread hangs, kicking out server!");
-            ASSERT(false);
+            ABORT();
         }
 
         _freezeCheckTimer.expires_from_now(boost::posix_time::seconds(1));
@@ -464,7 +483,7 @@ bool LoadRealmInfo()
     boost::asio::ip::tcp::resolver resolver(_ioService);
     boost::asio::ip::tcp::resolver::iterator end;
 
-    QueryResult result = LoginDatabase.PQuery("SELECT id, name, address, localAddress, localSubnetMask, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild, Region, Battlegroup FROM realmlist WHERE id = %u", realmHandle.Index);
+    QueryResult result = LoginDatabase.PQuery("SELECT id, name, address, localAddress, localSubnetMask, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild, Region, Battlegroup FROM realmlist WHERE id = %u", realm.Id.Realm);
     if (!result)
         return false;
 
@@ -508,10 +527,9 @@ bool LoadRealmInfo()
     realm.Timezone = fields[8].GetUInt8();
     realm.AllowedSecurityLevel = AccountTypes(fields[9].GetUInt8());
     realm.PopulationLevel = fields[10].GetFloat();
-    realm.Id.Index = fields[0].GetUInt32();
-    realm.Id.Build = fields[11].GetUInt32();
     realm.Id.Region = fields[12].GetUInt8();
-    realm.Id.Battlegroup = fields[13].GetUInt8();
+    realm.Id.Site = fields[13].GetUInt8();
+    realm.Build = fields[11].GetUInt32();
     return true;
 }
 
@@ -523,34 +541,23 @@ bool StartDB()
     // Load databases
     DatabaseLoader loader("server.worldserver", DatabaseLoader::DATABASE_NONE);
     loader
-        .AddDatabase(HotfixDatabase, "Hotfix")
-        .AddDatabase(WorldDatabase, "World")
+        .AddDatabase(LoginDatabase, "Login")
         .AddDatabase(CharacterDatabase, "Character")
-        .AddDatabase(LoginDatabase, "Login");
+        .AddDatabase(WorldDatabase, "World")
+        .AddDatabase(HotfixDatabase, "Hotfix");
 
     if (!loader.Load())
         return false;
 
     ///- Get the realm Id from the configuration file
-    realmHandle.Index = sConfigMgr->GetIntDefault("RealmID", 0);
-    if (!realmHandle.Index)
+    realm.Id.Realm = sConfigMgr->GetIntDefault("RealmID", 0);
+    if (!realm.Id.Realm)
     {
         TC_LOG_ERROR("server.worldserver", "Realm ID not defined in configuration file");
         return false;
     }
 
-    // Realm Handles
-    QueryResult realmIdQuery = LoginDatabase.PQuery("SELECT `Region`,`Battlegroup` FROM `realmlist` WHERE `id`=%u", realmHandle.Index);
-    if (!realmIdQuery)
-    {
-        TC_LOG_ERROR("server.worldserver", "Realm id %u not defined in realmlist table", realmHandle.Index);
-        return false;
-    }
-
-    realmHandle.Region = (*realmIdQuery)[0].GetUInt8();
-    realmHandle.Battlegroup = (*realmIdQuery)[1].GetUInt8();
-
-    TC_LOG_INFO("server.worldserver", "Realm running as realm ID %u region %u battlegroup %u", realmHandle.Index, uint32(realmHandle.Region), uint32(realmHandle.Battlegroup));
+    TC_LOG_INFO("server.worldserver", "Realm running as realm ID %u", realm.Id.Realm);
 
     ///- Clean the database before starting
     ClearOnlineAccounts();
@@ -577,7 +584,7 @@ void StopDB()
 void ClearOnlineAccounts()
 {
     // Reset online status for all accounts with characters on the current realm
-    LoginDatabase.DirectPExecute("UPDATE account SET online = 0 WHERE online > 0 AND id IN (SELECT acctid FROM realmcharacters WHERE realmid = %d)", realmHandle.Index);
+    LoginDatabase.DirectPExecute("UPDATE account SET online = 0 WHERE online > 0 AND id IN (SELECT acctid FROM realmcharacters WHERE realmid = %d)", realm.Id.Realm);
 
     // Reset online status for all characters
     CharacterDatabase.DirectExecute("UPDATE characters SET online = 0 WHERE online <> 0");
@@ -588,7 +595,7 @@ void ClearOnlineAccounts()
 
 /// @}
 
-variables_map GetConsoleArguments(int argc, char** argv, std::string& configFile, std::string& configService)
+variables_map GetConsoleArguments(int argc, char** argv, fs::path& configFile, std::string& configService)
 {
     // Silences warning about configService not be used if the OS is not Windows
     (void)configService;
@@ -597,7 +604,8 @@ variables_map GetConsoleArguments(int argc, char** argv, std::string& configFile
     all.add_options()
         ("help,h", "print usage message")
         ("version,v", "print version build info")
-        ("config,c", value<std::string>(&configFile)->default_value(_TRINITY_CORE_CONFIG), "use <arg> as configuration file")
+        ("config,c", value<fs::path>(&configFile)->default_value(fs::absolute(_TRINITY_CORE_CONFIG)),
+                     "use <arg> as configuration file")
         ;
 #ifdef _WIN32
     options_description win("Windows platform specific options");

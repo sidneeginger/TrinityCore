@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -140,8 +140,8 @@ namespace WorldPackets
 
             struct SupportTicketCalendarEventInfo
             {
-                ObjectGuid EventID;
-                ObjectGuid InviteID;
+                uint64 EventID;
+                uint64 InviteID;
                 std::string EventTitle;
             };
 
@@ -157,21 +157,22 @@ namespace WorldPackets
                 std::string GuildName;
             };
 
-            struct Struct5E4383
+            struct SupportTicketLFGListSearchResult
             {
                 WorldPackets::LFG::RideTicket RideTicket;
-                ObjectGuid _40;
-                ObjectGuid _56;
-                ObjectGuid _72;
-                std::string _88;
-                std::string _217;
-                std::string _1242;
+                uint32 GroupFinderActivityID = 0;
+                ObjectGuid LastTitleAuthorGuid;
+                ObjectGuid LastDescriptionAuthorGuid;
+                ObjectGuid LastVoiceChatAuthorGuid;
+                std::string Title;
+                std::string Description;
+                std::string VoiceChat;
             };
 
-            struct Struct5E3DFB
+            struct SupportTicketLFGListApplicant
             {
                 WorldPackets::LFG::RideTicket RideTicket;
-                std::string _32;
+                std::string Comment;
             };
 
             SupportTicketSubmitComplaint(WorldPacket&& packet) : ClientPacket(CMSG_SUPPORT_TICKET_SUBMIT_COMPLAINT, std::move(packet)) { }
@@ -187,9 +188,38 @@ namespace WorldPackets
             Optional<SupportTicketCalendarEventInfo> CalenderInfo;
             Optional<SupportTicketPetInfo> PetInfo;
             Optional<SupportTicketGuildInfo> GuildInfo;
-            Optional<Struct5E4383> _5E4383;
-            Optional<Struct5E3DFB> _5E3DFB;
+            Optional<SupportTicketLFGListSearchResult> LFGListSearchResult;
+            Optional<SupportTicketLFGListApplicant> LFGListApplicant;
 
+        };
+
+        class Complaint final : public ClientPacket
+        {
+        public:
+            struct ComplaintOffender
+            {
+                ObjectGuid PlayerGuid;
+                uint32 RealmAddress = 0;
+                uint32 TimeSinceOffence = 0;
+            };
+
+            struct ComplaintChat
+            {
+                uint32 Command = 0;
+                uint32 ChannelID = 0;
+                std::string MessageLog;
+            };
+
+            Complaint(WorldPacket&& packet) : ClientPacket(CMSG_COMPLAINT, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 ComplaintType = 0;
+            ComplaintOffender Offender;
+            uint32 MailID = 0;
+            ComplaintChat Chat;
+            uint64 EventGuid;
+            uint64 InviteGuid;
         };
 
         class ComplaintResult final : public ServerPacket

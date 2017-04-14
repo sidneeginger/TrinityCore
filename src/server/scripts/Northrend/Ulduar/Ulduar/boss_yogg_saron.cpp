@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -230,6 +230,9 @@ enum Spells
 
     // Descend Into Madness
     SPELL_TELEPORT_PORTAL_VISUAL            = 64416,
+    SPELL_TELEPORT_TO_STORMWIND_ILLUSION    = 63989,
+    SPELL_TELEPORT_TO_CHAMBER_ILLUSION      = 63997,
+    SPELL_TELEPORT_TO_ICECROWN_ILLUSION     = 63998,
 
     // Illusions
     SPELL_GRIM_REPRISAL                     = 63305,
@@ -395,26 +398,35 @@ enum MiscData
 {
     ACHIEV_TIMED_START_EVENT                = 21001,
     SOUND_LUNATIC_GAZE                      = 15757,
+    MAX_ILLUSION_ROOMS                      = 3
+};
+
+uint32 const IllusionSpells[MAX_ILLUSION_ROOMS]
+{
+    SPELL_TELEPORT_TO_CHAMBER_ILLUSION,
+    SPELL_TELEPORT_TO_ICECROWN_ILLUSION,
+    SPELL_TELEPORT_TO_STORMWIND_ILLUSION
 };
 
 class StartAttackEvent : public BasicEvent
 {
     public:
         StartAttackEvent(Creature* summoner, Creature* owner)
-            : _summoner(summoner), _owner(owner)
+            : _summonerGuid(summoner->GetGUID()), _owner(owner)
         {
         }
 
-        bool Execute(uint64 /*time*/, uint32 /*diff*/)
+        bool Execute(uint64 /*time*/, uint32 /*diff*/) override
         {
             _owner->SetReactState(REACT_AGGRESSIVE);
-            if (Unit* target = _summoner->AI()->SelectTarget(SELECT_TARGET_RANDOM, 0, 300.0f))
-                _owner->AI()->AttackStart(target);
+            if (Creature* _summoner = ObjectAccessor::GetCreature(*_owner, _summonerGuid))
+                if (Unit* target = _summoner->AI()->SelectTarget(SELECT_TARGET_RANDOM, 0, 300.0f))
+                    _owner->AI()->AttackStart(target);
             return true;
         }
 
     private:
-        Creature* _summoner;
+        ObjectGuid _summonerGuid;
         Creature* _owner;
 };
 
@@ -446,9 +458,9 @@ class boss_voice_of_yogg_saron : public CreatureScript
                     me->SetInCombatWithZone();
             }
 
-            void EnterEvadeMode() override
+            void EnterEvadeMode(EvadeReason why) override
             {
-                BossAI::EnterEvadeMode();
+                BossAI::EnterEvadeMode(why);
 
                 for (uint8 i = DATA_SARA; i <= DATA_MIMIRON_YS; ++i)
                     if (Creature* creature = ObjectAccessor::GetCreature(*me, instance->GetGuidData(i)))
@@ -473,7 +485,7 @@ class boss_voice_of_yogg_saron : public CreatureScript
                 events.SetPhase(PHASE_ONE);
 
                 instance->SetData(DATA_DRIVE_ME_CRAZY, uint32(true));
-                instance->DoStopTimedAchievement(ACHIEVEMENT_TIMED_TYPE_EVENT, ACHIEV_TIMED_START_EVENT);
+                instance->DoStopCriteriaTimer(CRITERIA_TIMED_TYPE_EVENT, ACHIEV_TIMED_START_EVENT);
 
                 Initialize();
 
@@ -497,7 +509,7 @@ class boss_voice_of_yogg_saron : public CreatureScript
                     if (Creature* keeper = ObjectAccessor::GetCreature(*me, instance->GetGuidData(i)))
                         keeper->SetInCombatWith(me);
 
-                instance->DoStartTimedAchievement(ACHIEVEMENT_TIMED_TYPE_EVENT, ACHIEV_TIMED_START_EVENT);
+                instance->DoStartCriteriaTimer(CRITERIA_TIMED_TYPE_EVENT, ACHIEV_TIMED_START_EVENT);
 
                 me->CastCustomSpell(SPELL_SUMMON_GUARDIAN_2, SPELLVALUE_MAX_TARGETS, 1);
                 DoCast(me, SPELL_SANITY_PERIODIC);
@@ -695,19 +707,22 @@ class boss_sara : public CreatureScript
 
             void DamageTaken(Unit* /*attacker*/, uint32& damage) override
             {
-                if (_events.IsInPhase(PHASE_ONE) && damage >= me->GetHealth())
+                if (damage >= me->GetHealth())
                 {
-                    damage = 0;
+                    damage = me->GetHealth() - 1;
 
-                    if (Creature* voice = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_VOICE_OF_YOGG_SARON)))
-                        voice->AI()->DoAction(ACTION_PHASE_TRANSFORM);
+                    if (_events.IsInPhase(PHASE_ONE))
+                    {
+                        if (Creature* voice = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_VOICE_OF_YOGG_SARON)))
+                            voice->AI()->DoAction(ACTION_PHASE_TRANSFORM);
 
-                    Talk(SAY_SARA_TRANSFORM_1);
-                    _events.SetPhase(PHASE_TRANSFORM);
-                    _events.ScheduleEvent(EVENT_TRANSFORM_1, 4700, 0, PHASE_TRANSFORM);
-                    _events.ScheduleEvent(EVENT_TRANSFORM_2, 9500, 0, PHASE_TRANSFORM);
-                    _events.ScheduleEvent(EVENT_TRANSFORM_3, 14300, 0, PHASE_TRANSFORM);
-                    _events.ScheduleEvent(EVENT_TRANSFORM_4, 14500, 0, PHASE_TRANSFORM);
+                        Talk(SAY_SARA_TRANSFORM_1);
+                        _events.SetPhase(PHASE_TRANSFORM);
+                        _events.ScheduleEvent(EVENT_TRANSFORM_1, 4700, 0, PHASE_TRANSFORM);
+                        _events.ScheduleEvent(EVENT_TRANSFORM_2, 9500, 0, PHASE_TRANSFORM);
+                        _events.ScheduleEvent(EVENT_TRANSFORM_3, 14300, 0, PHASE_TRANSFORM);
+                        _events.ScheduleEvent(EVENT_TRANSFORM_4, 14500, 0, PHASE_TRANSFORM);
+                    }
                 }
             }
 
@@ -1415,7 +1430,11 @@ class npc_descend_into_madness : public CreatureScript
             {
                 if (!result)
                     return;
+
                 clicker->RemoveAurasDueToSpell(SPELL_BRAIN_LINK);
+                uint32 illusion = _instance->GetData(DATA_ILLUSION);
+                if (illusion < MAX_ILLUSION_ROOMS)
+                    DoCast(clicker, IllusionSpells[illusion], true);
                 me->DespawnOrUnsummon();
             }
 
@@ -1504,9 +1523,9 @@ class npc_observation_ring_keeper : public CreatureScript
                 DoCast(SPELL_KEEPER_ACTIVE);
             }
 
-            void sGossipSelect(Player* player, uint32 sender, uint32 /*action*/) override
+            void sGossipSelect(Player* player, uint32 menuId, uint32 /*gossipListId*/) override
             {
-                if (sender != 10333)
+                if (menuId != 10333)
                     return;
 
                 me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
@@ -2419,7 +2438,7 @@ class spell_yogg_saron_squeeze : public SpellScriptLoader     // 64125
             {
                 if (Unit* vehicle = GetTarget()->GetVehicleBase())
                     if (vehicle->IsAlive())
-                        vehicle->Kill(vehicle); // should tentacle die or just release its target?
+                        vehicle->KillSelf(); // should tentacle die or just release its target?
             }
 
             void Register() override
@@ -2901,7 +2920,7 @@ class spell_yogg_saron_insane : public SpellScriptLoader     // 63120
             void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
                 if (GetTarget()->IsAlive())
-                    GetTarget()->Kill(GetTarget());
+                    GetTarget()->KillSelf();
             }
 
             void Register() override

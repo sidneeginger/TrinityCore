@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -573,7 +573,7 @@ struct gunship_npc_AI : public ScriptedAI
         }
     }
 
-    void EnterEvadeMode() override
+    void EnterEvadeMode(EvadeReason /*why*/) override
     {
         if (!me->IsAlive() || !me->IsInCombat())
             return;
@@ -622,7 +622,7 @@ protected:
     {
         if (Instance->GetBossState(DATA_ICECROWN_GUNSHIP_BATTLE) != IN_PROGRESS)
         {
-            EnterEvadeMode();
+            EnterEvadeMode(EVADE_REASON_OTHER);
             return false;
         }
 
@@ -635,7 +635,7 @@ protected:
         }
         else if (me->getThreatManager().isThreatListEmpty())
         {
-            EnterEvadeMode();
+            EnterEvadeMode(EVADE_REASON_OTHER);
             return false;
         }
 
@@ -870,7 +870,7 @@ class npc_high_overlord_saurfang_igb : public CreatureScript
                 _events.ScheduleEvent(EVENT_CLEAVE, urand(2000, 10000));
             }
 
-            void EnterEvadeMode() override
+            void EnterEvadeMode(EvadeReason /*why*/) override
             {
                 if (!me->IsAlive())
                     return;
@@ -956,7 +956,7 @@ class npc_high_overlord_saurfang_igb : public CreatureScript
                 }
             }
 
-            void sGossipSelect(Player* /*player*/, uint32 /*sender*/, uint32 /*action*/) override
+            void sGossipSelect(Player* /*player*/, uint32 /*menuId*/, uint32 /*gossipListId*/) override
             {
                 me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
                 me->GetTransport()->EnableMovement(true);
@@ -1138,7 +1138,7 @@ class npc_muradin_bronzebeard_igb : public CreatureScript
                 _events.ScheduleEvent(EVENT_CLEAVE, urand(2000, 10000));
             }
 
-            void EnterEvadeMode() override
+            void EnterEvadeMode(EvadeReason /*why*/) override
             {
                 if (!me->IsAlive())
                     return;
@@ -1224,7 +1224,7 @@ class npc_muradin_bronzebeard_igb : public CreatureScript
                 }
             }
 
-            void sGossipSelect(Player* /*player*/, uint32 /*sender*/, uint32 /*action*/) override
+            void sGossipSelect(Player* /*player*/, uint32 /*menuId*/, uint32 /*gossipListId*/) override
             {
                 me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
                 me->GetTransport()->EnableMovement(true);
@@ -1389,7 +1389,7 @@ class npc_zafod_boombox : public CreatureScript
                 me->SetReactState(REACT_PASSIVE);
             }
 
-            void sGossipSelect(Player* player, uint32 /*sender*/, uint32 /*action*/) override
+            void sGossipSelect(Player* player, uint32 /*menuId*/, uint32 /*gossipListId*/) override
             {
                 player->AddItem(ITEM_GOBLIN_ROCKET_PACK, 1);
                 player->PlayerTalkClass->SendCloseGossip();
@@ -1716,10 +1716,7 @@ class npc_gunship_mage : public CreatureScript
                 me->SetReactState(REACT_PASSIVE);
             }
 
-            void EnterEvadeMode() override
-            {
-                ScriptedAI::EnterEvadeMode();
-            }
+            void EnterEvadeMode(EvadeReason /*why*/) override { }
 
             void MovementInform(uint32 type, uint32 pointId) override
             {
@@ -2133,14 +2130,17 @@ class spell_igb_below_zero : public SpellScriptLoader
         {
             PrepareSpellScript(spell_igb_below_zero_SpellScript);
 
-            void RemovePassengers()
+            void RemovePassengers(SpellMissInfo missInfo)
             {
+                if (missInfo != SPELL_MISS_NONE)
+                    return;
+
                 GetHitUnit()->CastSpell(GetHitUnit(), SPELL_EJECT_ALL_PASSENGERS_BELOW_ZERO, TRIGGERED_FULL_MASK);
             }
 
             void Register() override
             {
-                BeforeHit += SpellHitFn(spell_igb_below_zero_SpellScript::RemovePassengers);
+                BeforeHit += BeforeSpellHitFn(spell_igb_below_zero_SpellScript::RemovePassengers);
             }
         };
 
@@ -2456,6 +2456,33 @@ class spell_igb_teleport_players_on_victory : public SpellScriptLoader
         }
 };
 
+// 71201 - Battle Experience - proc should never happen, handled in script
+class spell_igb_battle_experience_check : public SpellScriptLoader
+{
+public:
+    spell_igb_battle_experience_check() : SpellScriptLoader("spell_igb_battle_experience_check") { }
+
+    class spell_igb_battle_experience_check_AuraScript : public AuraScript
+    {
+        PrepareAuraScript(spell_igb_battle_experience_check_AuraScript);
+
+        bool CheckProc(ProcEventInfo& /*eventInfo*/)
+        {
+            return false;
+        }
+
+        void Register() override
+        {
+            DoCheckProc += AuraCheckProcFn(spell_igb_battle_experience_check_AuraScript::CheckProc);
+        }
+    };
+
+    AuraScript* GetAuraScript() const override
+    {
+        return new spell_igb_battle_experience_check_AuraScript();
+    }
+};
+
 class achievement_im_on_a_boat : public AchievementCriteriaScript
 {
     public:
@@ -2495,5 +2522,6 @@ void AddSC_boss_icecrown_gunship_battle()
     new spell_igb_gunship_fall_teleport();
     new spell_igb_check_for_players();
     new spell_igb_teleport_players_on_victory();
+    new spell_igb_battle_experience_check();
     new achievement_im_on_a_boat();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -21,40 +21,46 @@
 
 #include "Define.h"
 
-#include <unordered_map>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <cmath>
-#include <errno.h>
-#include <signal.h>
-#include <assert.h>
-
-#include <set>
-#include <list>
-#include <string>
-#include <map>
-#include <queue>
-#include <sstream>
 #include <algorithm>
+#include <array>
+#include <exception>
+#include <list>
+#include <map>
 #include <memory>
+#include <queue>
+#include <set>
+#include <sstream>
+#include <string>
+#include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include <numeric>
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <cerrno>
+#include <csignal>
 
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/functional/hash.hpp>
 
 #include "Debugging/Errors.h"
 
 #include "Threading/LockedQueue.h"
 
-#if PLATFORM == PLATFORM_WINDOWS
+#if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
 #  include <ws2tcpip.h>
 
-#  if defined(__INTEL_COMPILER)
+#  if TRINITY_COMPILER == TRINITY_COMPILER_INTEL
 #    if !defined(BOOST_ASIO_HAS_MOVE)
 #      define BOOST_ASIO_HAS_MOVE
 #    endif // !defined(BOOST_ASIO_HAS_MOVE)
-#  endif // if defined(__INTEL_COMPILER)
+#  endif // if TRINITY_COMPILER == TRINITY_COMPILER_INTEL
 
 #else
 #  include <sys/types.h>
@@ -65,7 +71,7 @@
 #  include <netdb.h>
 #endif
 
-#if COMPILER == COMPILER_MICROSOFT
+#if TRINITY_COMPILER == TRINITY_COMPILER_MICROSOFT
 
 #include <float.h>
 
@@ -131,15 +137,15 @@ const uint8 OLD_TOTAL_LOCALES = 9; /// @todo convert in simple system
 
 #define MAX_LOCALES 11
 
-extern char const* localeNames[TOTAL_LOCALES];
+TC_COMMON_API extern char const* localeNames[TOTAL_LOCALES];
 
-LocaleConstant GetLocaleByName(const std::string& name);
+TC_COMMON_API LocaleConstant GetLocaleByName(const std::string& name);
 
 typedef std::vector<std::string> StringVector;
 
 #pragma pack(push, 1)
 
-struct LocalizedString
+struct TC_COMMON_API LocalizedString
 {
     char const* Str[TOTAL_LOCALES];
 };
@@ -173,6 +179,21 @@ namespace Trinity
     {
         return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
     }
+}
+
+//! Hash implementation for std::pair to allow using pairs in unordered_set or as key for unordered_map
+//! Individual types used in pair must be hashable by boost::hash
+namespace std
+{
+    template<class K, class V>
+    struct hash<std::pair<K, V>>
+    {
+    public:
+        size_t operator()(std::pair<K, V> const& key) const
+        {
+            return boost::hash_value(key);
+        }
+    };
 }
 
 #endif

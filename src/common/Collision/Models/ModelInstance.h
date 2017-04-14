@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -39,7 +39,7 @@ namespace VMAP
         MOD_HAS_BOUND = 1<<2
     };
 
-    class ModelSpawn
+    class TC_COMMON_API ModelSpawn
     {
         public:
             //mapID, tileX, tileY, Flags, ID, Pos, Rot, Scale, Bound_lo, Bound_hi, name
@@ -60,7 +60,7 @@ namespace VMAP
             static bool writeToFile(FILE* rw, const ModelSpawn &spawn);
     };
 
-    class ModelInstance: public ModelSpawn
+    class TC_COMMON_API ModelInstance: public ModelSpawn
     {
         public:
             ModelInstance(): iInvScale(0.0f), iModel(nullptr) { }
@@ -70,12 +70,11 @@ namespace VMAP
             void intersectPoint(const G3D::Vector3& p, AreaInfo &info) const;
             bool GetLocationInfo(const G3D::Vector3& p, LocationInfo &info) const;
             bool GetLiquidLevel(const G3D::Vector3& p, LocationInfo &info, float &liqHeight) const;
+            WorldModel* getWorldModel() { return iModel; }
         protected:
             G3D::Matrix3 iInvRot;
             float iInvScale;
             WorldModel* iModel;
-        public:
-            WorldModel* getWorldModel();
     };
 } // namespace VMAP
 

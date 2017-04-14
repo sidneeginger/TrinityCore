@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -19,7 +19,7 @@
 #define _CRT_SECURE_NO_DEPRECATE
 
 #include "loadlib.h"
-#include <cstdio>
+#include <CascLib.h>
 
 u_map_fcc MverMagic = { { 'R','E','V','M' } };
 
@@ -34,29 +34,28 @@ ChunkedFile::~ChunkedFile()
     free();
 }
 
-bool ChunkedFile::loadFile(HANDLE mpq, char* filename, bool log)
+bool ChunkedFile::loadFile(CASC::StorageHandle const& mpq, std::string const& fileName, bool log)
 {
     free();
-    HANDLE file;
-    if (!CascOpenFile(mpq, filename, CASC_LOCALE_ALL, 0, &file))
-    {
-        if (log)
-            printf("No such file %s\n", filename);
+    CASC::FileHandle file = CASC::OpenFile(mpq, fileName.c_str(), CASC_LOCALE_ALL, log);
+    if (!file)
         return false;
-    }
 
-    data_size = CascGetFileSize(file, NULL);
+    DWORD fileSize = CASC::GetFileSize(file, nullptr);
+    if (fileSize == CASC_INVALID_SIZE)
+        return false;
+
+    data_size = fileSize;
     data = new uint8[data_size];
-    CascReadFile(file, data, data_size, NULL/*bytesRead*/);
+    DWORD bytesRead = 0;
+    if (!CASC::ReadFile(file, data, data_size, &bytesRead) || bytesRead != data_size)
+        return false;
+
     parseChunks();
     if (prepareLoadedData())
-    {
-        CascCloseFile(file);
         return true;
-    }
 
-    printf("Error loading %s\n", filename);
-    CascCloseFile(file);
+    printf("Error loading %s\n", fileName.c_str());
     free();
 
     return false;
@@ -97,7 +96,8 @@ u_map_fcc InterestingChunks[] =
     { { 'K', 'N', 'C', 'M' } },
     { { 'T', 'V', 'C', 'M' } },
     { { 'O', 'M', 'W', 'M' } },
-    { { 'Q', 'L', 'C', 'M' } }
+    { { 'Q', 'L', 'C', 'M' } },
+    { { 'O', 'B', 'F', 'M' } }
 };
 
 bool IsInterestingChunk(u_map_fcc const& fcc)

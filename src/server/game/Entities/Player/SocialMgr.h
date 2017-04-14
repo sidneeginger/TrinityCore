@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -47,6 +47,7 @@ enum SocialFlag
 
 struct FriendInfo
 {
+    ObjectGuid WowAccountGuid;
     FriendStatus Status;
     uint8 Flags;
     uint32 Area;
@@ -57,7 +58,8 @@ struct FriendInfo
     FriendInfo() : Status(FRIEND_STATUS_OFFLINE), Flags(0), Area(0), Level(0), Class(0), Note()
     { }
 
-    FriendInfo(uint8 flags, std::string const& note) : Status(FRIEND_STATUS_OFFLINE), Flags(flags), Area(0), Level(0), Class(0), Note(note)
+    FriendInfo(ObjectGuid const& accountGuid, uint8 flags, std::string const& note) : WowAccountGuid(accountGuid), Status(FRIEND_STATUS_OFFLINE),
+        Flags(flags), Area(0), Level(0), Class(0), Note(note)
     { }
 };
 
@@ -98,7 +100,7 @@ enum FriendsResult : uint8
 #define SOCIALMGR_FRIEND_LIMIT  50u
 #define SOCIALMGR_IGNORE_LIMIT  50u
 
-class PlayerSocial
+class TC_GAME_API PlayerSocial
 {
     friend class SocialMgr;
 
@@ -136,11 +138,7 @@ class SocialMgr
         ~SocialMgr() { }
 
     public:
-        static SocialMgr* instance()
-        {
-            static SocialMgr instance;
-            return &instance;
-        }
+        static SocialMgr* instance();
 
         // Misc
         void RemovePlayerSocial(ObjectGuid const& guid) { _socialMap.erase(guid); }

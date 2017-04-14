@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +21,7 @@
 #include "Packet.h"
 #include "ObjectGuid.h"
 #include "SpellPackets.h"
+#include "CollectionMgr.h"
 
 namespace WorldPackets
 {
@@ -56,17 +57,6 @@ namespace WorldPackets
 
             bool IsFullUpdate = false;
             ToyBoxContainer const* Toys = nullptr;
-        };
-
-        class ToySetFavorite final : public ClientPacket
-        {
-        public:
-            ToySetFavorite(WorldPacket&& packet) : ClientPacket(CMSG_TOY_SET_FAVORITE, std::move(packet)) { }
-
-            void Read() override;
-
-            uint32 ItemID = 0;
-            bool Favorite = false;
         };
     }
 }

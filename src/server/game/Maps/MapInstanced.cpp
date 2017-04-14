@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
 #include "Group.h"
 #include "Player.h"
 #include "GarrisonMap.h"
+#include "ScenarioMgr.h"
 
 MapInstanced::MapInstanced(uint32 id, time_t expiry) : Map(id, expiry, 0, DIFFICULTY_NORMAL)
 {
@@ -111,12 +112,12 @@ void MapInstanced::UnloadAll()
 - create the instance if it's not created already
 - the player is not actually added to the instance (only in InstanceMap::Add)
 */
-Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player)
+Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player, uint32 loginInstanceId)
 {
     if (GetId() != mapId || !player)
-        return NULL;
+        return nullptr;
 
-    Map* map = NULL;
+    Map* map = nullptr;
     uint32 newInstanceId = 0;                       // instanceId of the resulting map
 
     if (IsBattlegroundOrArena())
@@ -125,7 +126,7 @@ Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player)
         // the instance id is set in battlegroundid
         newInstanceId = player->GetBattlegroundId();
         if (!newInstanceId)
-            return NULL;
+            return nullptr;
 
         map = sMapMgr->FindMap(mapId, newInstanceId);
         if (!map)
@@ -135,27 +136,40 @@ Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player)
             else
             {
                 player->TeleportToBGEntryPoint();
-                return NULL;
+                return nullptr;
             }
         }
     }
     else if (!IsGarrison())
     {
         InstancePlayerBind* pBind = player->GetBoundInstance(GetId(), player->GetDifficultyID(GetEntry()));
-        InstanceSave* pSave = pBind ? pBind->save : NULL;
+        InstanceSave* pSave = pBind ? pBind->save : nullptr;
 
-        // the player's permanent player bind is taken into consideration first
-        // then the player's group bind and finally the solo bind.
+        // priority:
+        // 1. player's permanent bind
+        // 2. player's current instance id if this is at login
+        // 3. group's current bind
+        // 4. player's current bind
         if (!pBind || !pBind->perm)
         {
-            InstanceGroupBind* groupBind = NULL;
+            if (loginInstanceId) // if the player has a saved instance id on login, we either use this instance or relocate him out (return null)
+            {
+                map = FindInstanceMap(loginInstanceId);
+                return (map && map->GetId() == GetId()) ? map : nullptr; // is this check necessary? or does MapInstanced only find instances of itself?
+            }
+
+            InstanceGroupBind* groupBind = nullptr;
             Group* group = player->GetGroup();
             // use the player's difficulty setting (it may not be the same as the group's)
             if (group)
             {
                 groupBind = group->GetBoundInstance(this);
                 if (groupBind)
+                {
+                    // solo saves should be reset when entering a group's instance
+                    player->UnbindInstance(GetId(), player->GetDifficultyID(GetEntry()));
                     pSave = groupBind->save;
+                }
             }
         }
         if (pSave)
@@ -165,7 +179,7 @@ Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player)
             map = FindInstanceMap(newInstanceId);
             // it is possible that the save exists but the map doesn't
             if (!map)
-                map = CreateInstance(newInstanceId, pSave, pSave->GetDifficultyID());
+                map = CreateInstance(newInstanceId, pSave, pSave->GetDifficultyID(), player->GetTeamId());
         }
         else
         {
@@ -178,7 +192,7 @@ Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player)
             //ASSERT(!FindInstanceMap(NewInstanceId));
             map = FindInstanceMap(newInstanceId);
             if (!map)
-                map = CreateInstance(newInstanceId, NULL, diff);
+                map = CreateInstance(newInstanceId, NULL, diff, player->GetTeamId());
         }
     }
     else
@@ -192,7 +206,7 @@ Map* MapInstanced::CreateInstanceForPlayer(const uint32 mapId, Player* player)
     return map;
 }
 
-InstanceMap* MapInstanced::CreateInstance(uint32 InstanceId, InstanceSave* save, Difficulty difficulty)
+InstanceMap* MapInstanced::CreateInstance(uint32 InstanceId, InstanceSave* save, Difficulty difficulty, TeamId team)
 {
     // load/create a map
     std::lock_guard<std::mutex> lock(_mapLock);
@@ -202,17 +216,17 @@ InstanceMap* MapInstanced::CreateInstance(uint32 InstanceId, InstanceSave* save,
     if (!entry)
     {
         TC_LOG_ERROR("maps", "CreateInstance: no entry for map %d", GetId());
-        ASSERT(false);
+        ABORT();
     }
     const InstanceTemplate* iTemplate = sObjectMgr->GetInstanceTemplate(GetId());
     if (!iTemplate)
     {
         TC_LOG_ERROR("maps", "CreateInstance: no instance template for map %d", GetId());
-        ASSERT(false);
+        ABORT();
     }
 
     // some instances only have one difficulty
-    GetDownscaledMapDifficultyData(GetId(), difficulty);
+    sDB2Manager.GetDownscaledMapDifficultyData(GetId(), difficulty);
 
     TC_LOG_DEBUG("maps", "MapInstanced::CreateInstance: %s map instance %d for %d created with difficulty %s", save ? "" : "new ", InstanceId, GetId(), difficulty ? "heroic" : "normal");
 
@@ -224,6 +238,11 @@ InstanceMap* MapInstanced::CreateInstance(uint32 InstanceId, InstanceSave* save,
 
     bool load_data = save != NULL;
     map->CreateInstanceData(load_data);
+    if (InstanceScenario* instanceScenario = sScenarioMgr->CreateInstanceScenario(map, team))
+        map->SetInstanceScenario(instanceScenario);
+
+    if (sWorld->getBoolConfig(CONFIG_INSTANCEMAP_LOAD_GRIDS))
+        map->LoadAllCells();
 
     m_InstancedMaps[InstanceId] = map;
     return map;
@@ -288,8 +307,8 @@ bool MapInstanced::DestroyInstance(InstancedMaps::iterator &itr)
     return true;
 }
 
-bool MapInstanced::CanEnter(Player* /*player*/)
+Map::EnterState MapInstanced::CannotEnter(Player* /*player*/)
 {
-    //ASSERT(false);
-    return true;
+    //ABORT();
+    return CAN_ENTER;
 }

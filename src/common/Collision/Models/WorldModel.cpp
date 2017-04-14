@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -17,7 +17,6 @@
  */
 
 #include "WorldModel.h"
-#include "ModelInstance.h"
 #include "VMapDefinitions.h"
 #include "MapTree.h"
 
@@ -250,6 +249,13 @@ namespace VMAP
         return result;
     }
 
+    void WmoLiquid::getPosInfo(uint32 &tilesX, uint32 &tilesY, G3D::Vector3 &corner) const
+    {
+        tilesX = iTilesX;
+        tilesY = iTilesY;
+        corner = iCorner;
+    }
+
     // ===================== GroupModel ==================================
 
     GroupModel::GroupModel(const GroupModel &other):
@@ -408,6 +414,13 @@ namespace VMAP
         if (iLiquid)
             return iLiquid->GetType();
         return 0;
+    }
+
+    void GroupModel::getMeshData(std::vector<G3D::Vector3>& outVertices, std::vector<MeshTriangle>& outTriangles, WmoLiquid*& liquid)
+    {
+        outVertices = vertices;
+        outTriangles = triangles;
+        liquid = iLiquid;
     }
 
     // ===================== WorldModel ==================================
@@ -582,5 +595,10 @@ namespace VMAP
 
         fclose(rf);
         return result;
+    }
+
+    void WorldModel::getGroupModels(std::vector<GroupModel>& outGroupModels)
+    {
+        outGroupModels = groupModels;
     }
 }

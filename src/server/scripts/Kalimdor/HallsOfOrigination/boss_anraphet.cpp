@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -284,7 +284,7 @@ class npc_omega_stance : public CreatureScript
                 DoCast(me, SPELL_OMEGA_STANCE_SPIDER_TRIGGER, true);
             }
 
-            void EnterEvadeMode() override { }
+            void EnterEvadeMode(EvadeReason /*why*/) override { }
         };
 
         CreatureAI* GetAI(Creature* creature) const override
@@ -308,7 +308,7 @@ class npc_alpha_beam : public CreatureScript
                     anraphet->CastSpell(me, SPELL_ALPHA_BEAMS_BACK_CAST);
             }
 
-            void EnterEvadeMode() override { } // Never evade
+            void EnterEvadeMode(EvadeReason /*why*/) override { } // Never evade
 
             private:
                 InstanceScript* _instance;
@@ -384,7 +384,7 @@ class npc_brann_bronzebeard_anraphet : public CreatureScript
                         case EVENT_BRANN_UNLOCK_DOOR:
                             Talk(BRANN_SAY_UNLOCK_DOOR);
                             _instance->SetBossState(DATA_VAULT_OF_LIGHTS, DONE);
-                            _instance->DoStartTimedAchievement(ACHIEVEMENT_TIMED_TYPE_EVENT, ACHIEV_VAULT_OF_LIGHTS_EVENT);
+                            _instance->DoStartCriteriaTimer(CRITERIA_TIMED_TYPE_EVENT, ACHIEV_VAULT_OF_LIGHTS_EVENT);
                             events.ScheduleEvent(EVENT_BRANN_MOVE_INTRO, 3500);
                             break;
                         case EVENT_BRANN_THINK:
@@ -482,18 +482,19 @@ public:
             targets.push_back(target);
         }
 
-        void Register()
+        void Register() override
         {
             OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_anraphet_alpha_beams_SpellScript::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
         }
     };
 
-    SpellScript* GetSpellScript() const
+    SpellScript* GetSpellScript() const override
     {
         return new spell_anraphet_alpha_beams_SpellScript();
     }
 };
 
+// 77106 - Omega Stance (Summon)
 class spell_anraphet_omega_stance_summon : public SpellScriptLoader
 {
 public:
@@ -503,59 +504,58 @@ public:
     {
         PrepareSpellScript(spell_anraphet_omega_stance_summon_SpellScript);
 
-        void ModDestHeight(SpellEffIndex /*effIndex*/)
+        void SetDest(SpellDestination& dest)
         {
-            Position offset = {0.0f, 0.0f, 30.0f, 0.0f};
-            const_cast<WorldLocation*>(GetExplTargetDest())->RelocateOffset(offset);
-            GetHitDest()->RelocateOffset(offset);
+            dest.RelocateOffset({ 0.0f, 0.0f, 30.0f, 0.0f });
         }
 
-        void Register()
+        void Register() override
         {
-            OnEffectLaunch += SpellEffectFn(spell_anraphet_omega_stance_summon_SpellScript::ModDestHeight, EFFECT_0, SPELL_EFFECT_SUMMON);
+            OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_anraphet_omega_stance_summon_SpellScript::SetDest, EFFECT_0, TARGET_DEST_DEST);
         }
     };
 
-    SpellScript* GetSpellScript() const
+    SpellScript* GetSpellScript() const override
     {
         return new spell_anraphet_omega_stance_summon_SpellScript();
     }
 };
 
-class spell_omega_stance_spider_effect : public SpellScriptLoader
+// 77127 Omega Stance Spider Effect
+class spell_anraphet_omega_stance_spider_effect : public SpellScriptLoader
 {
 public:
-    spell_omega_stance_spider_effect() : SpellScriptLoader("spell_omega_stance_spider_effect") { }
+    spell_anraphet_omega_stance_spider_effect() : SpellScriptLoader("spell_anraphet_omega_stance_spider_effect") { }
 
-    class spell_omega_stance_spider_effect_SpellScript : public SpellScript
+    class spell_anraphet_omega_stance_spider_effect_SpellScript : public SpellScript
     {
-        PrepareSpellScript(spell_omega_stance_spider_effect_SpellScript);
+        PrepareSpellScript(spell_anraphet_omega_stance_spider_effect_SpellScript);
 
-        void SetDestPosition(SpellEffIndex effIndex)
+        void SetDest(SpellDestination& dest)
         {
             // Do our own calculations for the destination position.
             /// TODO: Remove this once we find a general rule for WorldObject::MovePosition (this spell shouldn't take the Z change into consideration)
             Unit* caster = GetCaster();
             float angle = float(rand_norm()) * static_cast<float>(2 * M_PI);
-            uint32 dist = caster->GetObjectSize() + GetSpellInfo()->GetEffect(effIndex)->CalcRadius(GetCaster()) * (float)rand_norm();
+            uint32 dist = caster->GetObjectSize() + GetSpellInfo()->GetEffect(EFFECT_0)->CalcRadius(caster) * (float)rand_norm();
 
             float x = caster->GetPositionX() + dist * std::cos(angle);
             float y = caster->GetPositionY() + dist * std::sin(angle);
             float z = caster->GetMap()->GetHeight(x, y, caster->GetPositionZ());
+            float o = dest._position.GetOrientation();
 
-            const_cast<WorldLocation*>(GetExplTargetDest())->Relocate(x, y, z);
-            GetHitDest()->Relocate(x, y, z);
+            dest.Relocate({ x, y, z, o });
         }
 
-        void Register()
+        void Register() override
         {
-            OnEffectLaunch += SpellEffectFn(spell_omega_stance_spider_effect_SpellScript::SetDestPosition, EFFECT_0, SPELL_EFFECT_DUMMY);
+            OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_anraphet_omega_stance_spider_effect_SpellScript::SetDest, EFFECT_0, TARGET_DEST_CASTER_RANDOM);
         }
     };
 
-    SpellScript* GetSpellScript() const
+    SpellScript* GetSpellScript() const override
     {
-        return new spell_omega_stance_spider_effect_SpellScript();
+        return new spell_anraphet_omega_stance_spider_effect_SpellScript();
     }
 };
 
@@ -566,6 +566,6 @@ void AddSC_boss_anraphet()
     new npc_brann_bronzebeard_anraphet();
     new npc_alpha_beam();
     new spell_anraphet_omega_stance_summon();
-    new spell_omega_stance_spider_effect();
+    new spell_anraphet_omega_stance_spider_effect();
     new npc_omega_stance();
 }

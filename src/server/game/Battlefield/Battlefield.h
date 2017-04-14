@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -30,7 +30,16 @@ enum BattlefieldTypes
 
 enum BattlefieldIDs
 {
-    BATTLEFIELD_BATTLEID_WG                      = 1        // Wintergrasp battle
+    BATTLEFIELD_BATTLEID_WG                      = 1,       // Wintergrasp battle
+    BATTLEFIELD_BATTLEID_TB                      = 21,      // Tol Barad
+    BATTLEFIELD_BATTLEID_ASHRAN                  = 24       // Ashran
+};
+
+enum BattlefieldState : int8
+{
+    BATTLEFIELD_INACTIVE = 0,
+    BATTLEFIELD_WARMUP = 1,
+    BATTLEFIELD_IN_PROGRESS = 2
 };
 
 enum BattlefieldObjectiveStates
@@ -69,7 +78,7 @@ class BfGraveyard;
 typedef std::vector<BfGraveyard*> GraveyardVect;
 typedef std::map<ObjectGuid, time_t> PlayerTimerMap;
 
-class BfCapturePoint
+class TC_GAME_API BfCapturePoint
 {
     public:
         BfCapturePoint(Battlefield* bf);
@@ -98,14 +107,14 @@ class BfCapturePoint
         virtual void SendChangePhase();
 
         bool SetCapturePointData(GameObject* capturePoint);
+        bool DelCapturePoint();
         GameObject* GetCapturePointGo();
         uint32 GetCapturePointEntry() const { return m_capturePointEntry; }
 
         TeamId GetTeamId() const { return m_team; }
+        BattlefieldObjectiveStates GetObjectiveState() const { return m_State; }
 
     protected:
-        bool DelCapturePoint();
-
         // active Players in the area of the objective, 0 - alliance, 1 - horde
         GuidSet m_activePlayers[BG_TEAMS_COUNT];
 
@@ -137,7 +146,7 @@ class BfCapturePoint
         ObjectGuid m_capturePointGUID;
 };
 
-class BfGraveyard
+class TC_GAME_API BfGraveyard
 {
     public:
         BfGraveyard(Battlefield* Bf);
@@ -184,7 +193,7 @@ class BfGraveyard
         Battlefield* m_Bf;
 };
 
-class Battlefield : public ZoneScript
+class TC_GAME_API Battlefield : public ZoneScript
 {
     friend class BattlefieldMgr;
 
@@ -224,12 +233,14 @@ class Battlefield : public ZoneScript
 
         uint32 GetTypeId() const { return m_TypeId; }
         uint32 GetZoneId() const { return m_ZoneId; }
-        ObjectGuid GetGUID() const { return m_Guid; }
+        uint64 GetQueueId() const { return MAKE_PAIR64(m_BattleId | 0x20000, 0x1F100000); }
 
         void TeamApplyBuff(TeamId team, uint32 spellId, uint32 spellId2 = 0);
 
         /// Return true if battle is start, false if battle is not started
         bool IsWarTime() const { return m_isActive; }
+
+        int8 GetState() const { return m_isActive ? BATTLEFIELD_IN_PROGRESS : (m_Timer <= m_StartGroupingTimer ? BATTLEFIELD_WARMUP : BATTLEFIELD_INACTIVE); }
 
         /// Enable or Disable battlefield
         void ToggleBattlefield(bool enable) { m_IsEnabled = enable; }
@@ -283,9 +294,8 @@ class Battlefield : public ZoneScript
         BfGraveyard* GetGraveyardById(uint32 id) const;
 
         // Misc methods
-        virtual Creature* SpawnCreature(uint32 entry, float x, float y, float z, float o, TeamId /*teamId*/);
-        Creature* SpawnCreature(uint32 entry, Position const& pos, TeamId /*teamId*/);
-        GameObject* SpawnGameObject(uint32 entry, float x, float y, float z, float o);
+        Creature* SpawnCreature(uint32 entry, Position const& pos);
+        GameObject* SpawnGameObject(uint32 entry, Position const& pos, G3D::Quat const& rot);
 
         Creature* GetCreature(ObjectGuid guid);
         GameObject* GetGameObject(ObjectGuid guid);
@@ -313,6 +323,7 @@ class Battlefield : public ZoneScript
         void PlayerAcceptInviteToWar(Player* player);
         uint32 GetBattleId() const { return m_BattleId; }
         void AskToLeaveQueue(Player* player);
+        void PlayerAskToLeave(Player* player);
 
         virtual void DoCompleteOrIncrementAchievement(uint32 /*achievement*/, Player* /*player*/, uint8 /*incrementNumber = 1*/) { }
 
@@ -323,7 +334,7 @@ class Battlefield : public ZoneScript
         /// Return if we can use mount in battlefield
         bool CanFlyIn() { return !m_isActive; }
 
-        void SendAreaSpiritHealerQueryOpcode(Player* player, ObjectGuid guid);
+        void SendAreaSpiritHealerQueryOpcode(Player* player, ObjectGuid const& guid);
 
         void StartBattle();
         void EndBattle(bool endByTimer);
@@ -344,8 +355,6 @@ class Battlefield : public ZoneScript
         void InitStalker(uint32 entry, Position const& pos);
 
     protected:
-        ObjectGuid m_Guid;
-
         ObjectGuid StalkerGuid;
         uint32 m_Timer;                                         // Global timer for event
         bool m_IsEnabled;
@@ -356,9 +365,9 @@ class Battlefield : public ZoneScript
         BfCapturePointMap m_capturePoints;
 
         // Players info maps
-        GuidSet m_players[BG_TEAMS_COUNT];                      // Players in zone
-        GuidSet m_PlayersInQueue[BG_TEAMS_COUNT];               // Players in the queue
-        GuidSet m_PlayersInWar[BG_TEAMS_COUNT];                 // Players in WG combat
+        GuidUnorderedSet m_players[BG_TEAMS_COUNT];                      // Players in zone
+        GuidUnorderedSet m_PlayersInQueue[BG_TEAMS_COUNT];               // Players in the queue
+        GuidUnorderedSet m_PlayersInWar[BG_TEAMS_COUNT];                 // Players in WG combat
         PlayerTimerMap m_InvitedPlayers[BG_TEAMS_COUNT];
         PlayerTimerMap m_PlayersWillBeKick[BG_TEAMS_COUNT];
 
@@ -387,7 +396,7 @@ class Battlefield : public ZoneScript
         uint32 m_StartGroupingTimer;                            // Timer for invite players in area 15 minute before start battle
         bool m_StartGrouping;                                   // bool for know if all players in area has been invited
 
-        GuidSet m_Groups[BG_TEAMS_COUNT];                       // Contain different raid group
+        GuidUnorderedSet m_Groups[BG_TEAMS_COUNT];              // Contain different raid group
 
         std::vector<uint64> m_Data64;
         std::vector<uint32> m_Data32;

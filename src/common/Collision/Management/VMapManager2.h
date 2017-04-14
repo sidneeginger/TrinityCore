@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -51,7 +51,7 @@ namespace VMAP
     class StaticMapTree;
     class WorldModel;
 
-    class ManagedModel
+    class TC_COMMON_API ManagedModel
     {
         public:
             ManagedModel() : iModel(nullptr), iRefCount(0) { }
@@ -75,7 +75,7 @@ namespace VMAP
         VMAP_DISABLE_LIQUIDSTATUS   = 0x8
     };
 
-    class VMapManager2 : public IVMapManager
+    class TC_COMMON_API VMapManager2 : public IVMapManager
     {
         protected:
             // Tree to check collision
@@ -128,7 +128,7 @@ namespace VMAP
                 return getMapFileName(mapId);
             }
             virtual bool existsMap(const char* basePath, unsigned int mapId, int x, int y) override;
-        public:
+
             void getInstanceMapTree(InstanceTreeMap &instanceMapTree);
 
             typedef uint32(*GetLiquidFlagsFn)(uint32 liquidType);

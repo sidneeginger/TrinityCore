@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -65,7 +65,7 @@ class at_alizabal_intro : public AreaTriggerScript
     public:
         at_alizabal_intro() : AreaTriggerScript("at_alizabal_intro") { }
 
-        bool OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/, bool /*entered*/)
+        bool OnTrigger(Player* player, AreaTriggerEntry const* /*areaTrigger*/, bool /*entered*/) override
         {
             if (InstanceScript* instance = player->GetInstanceScript())
                 if (Creature* alizabal = ObjectAccessor::GetCreature(*player, instance->GetGuidData(DATA_ALIZABAL)))
@@ -111,7 +111,7 @@ class boss_alizabal : public CreatureScript
                     Talk(SAY_SLAY);
             }
 
-            void EnterEvadeMode() override
+            void EnterEvadeMode(EvadeReason /*why*/) override
             {
                 instance->SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, me);
                 me->GetMotionMaster()->MoveTargetedHome();
@@ -223,8 +223,8 @@ class boss_alizabal : public CreatureScript
                             }
                             break;
                         case EVENT_MOVE_STORM:
-                            me->SetSpeed(MOVE_RUN, 4.0f);
-                            me->SetSpeed(MOVE_WALK, 4.0f);
+                            me->SetSpeedRate(MOVE_RUN, 4.0f);
+                            me->SetSpeedRate(MOVE_WALK, 4.0f);
                             if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, NonTankTargetSelector(me)))
                                 me->GetMotionMaster()->MovePoint(POINT_STORM, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
                             events.ScheduleEvent(EVENT_MOVE_STORM, 4050);
@@ -232,8 +232,8 @@ class boss_alizabal : public CreatureScript
                         case EVENT_STOP_STORM:
                             me->RemoveAura(SPELL_BLADE_DANCE);
                             me->RemoveAura(SPELL_BLADE_DANCE_DUMMY);
-                            me->SetSpeed(MOVE_WALK, 1.0f);
-                            me->SetSpeed(MOVE_RUN, 1.14f);
+                            me->SetSpeedRate(MOVE_WALK, 1.0f);
+                            me->SetSpeedRate(MOVE_RUN, 1.14f);
                             me->GetMotionMaster()->MoveChase(me->GetVictim());
                             _hate = false;
                             _skewer = false;

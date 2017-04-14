@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -33,10 +33,19 @@ AccountMgr::~AccountMgr()
     ClearRBAC();
 }
 
+AccountMgr* AccountMgr::instance()
+{
+    static AccountMgr instance;
+    return &instance;
+}
+
 AccountOpResult AccountMgr::CreateAccount(std::string username, std::string password, std::string email /*= ""*/, uint32 bnetAccountId /*= 0*/, uint8 bnetIndex /*= 0*/)
 {
     if (utf8length(username) > MAX_ACCOUNT_STR)
         return AccountOpResult::AOR_NAME_TOO_LONG;                           // username's too long
+
+    if (utf8length(password) > MAX_PASS_STR)
+        return AccountOpResult::AOR_PASS_TOO_LONG;                           // password's too long
 
     Utf8ToUpperOnlyLatin(username);
     Utf8ToUpperOnlyLatin(password);
@@ -133,6 +142,10 @@ AccountOpResult AccountMgr::DeleteAccount(uint32 accountId)
     trans->Append(stmt);
 
     stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_BANNED);
+    stmt->setUInt32(0, accountId);
+    trans->Append(stmt);
+
+    stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_MUTED);
     stmt->setUInt32(0, accountId);
     trans->Append(stmt);
 
@@ -244,7 +257,10 @@ AccountOpResult AccountMgr::ChangeRegEmail(uint32 accountId, std::string newEmai
     std::string username;
 
     if (!GetName(accountId, username))
+    {
+        sScriptMgr->OnFailedEmailChange(accountId);
         return AccountOpResult::AOR_NAME_NOT_EXIST;                          // account doesn't exist
+    }
 
     if (utf8length(newEmail) > MAX_EMAIL_STR)
     {
@@ -456,7 +472,7 @@ void AccountMgr::LoadRBAC()
     while (result->NextRow());
 
     TC_LOG_DEBUG("rbac", "AccountMgr::LoadRBAC: Loading default permissions");
-    result = LoginDatabase.PQuery("SELECT secId, permissionId FROM rbac_default_permissions WHERE (realmId = %u OR realmId = -1) ORDER BY secId ASC", realmHandle.Index);
+    result = LoginDatabase.PQuery("SELECT secId, permissionId FROM rbac_default_permissions WHERE (realmId = %u OR realmId = -1) ORDER BY secId ASC", realm.Id.Realm);
     if (!result)
     {
         TC_LOG_INFO("server.loading", ">> Loaded 0 default permission definitions. DB table `rbac_default_permissions` is empty.");
@@ -488,19 +504,20 @@ void AccountMgr::UpdateAccountAccess(rbac::RBACData* rbac, uint32 accountId, uin
     if (rbac && securityLevel == rbac->GetSecurityLevel())
         rbac->SetSecurityLevel(securityLevel);
 
+    SQLTransaction trans = LoginDatabase.BeginTransaction();
     // Delete old security level from DB
     if (realmId == -1)
     {
         PreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_ACCESS);
         stmt->setUInt32(0, accountId);
-        LoginDatabase.Execute(stmt);
+        trans->Append(stmt);
     }
     else
     {
         PreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT_ACCESS_BY_REALM);
         stmt->setUInt32(0, accountId);
         stmt->setUInt32(1, realmId);
-        LoginDatabase.Execute(stmt);
+        trans->Append(stmt);
     }
 
     // Add new security level
@@ -510,8 +527,10 @@ void AccountMgr::UpdateAccountAccess(rbac::RBACData* rbac, uint32 accountId, uin
         stmt->setUInt32(0, accountId);
         stmt->setUInt8(1, securityLevel);
         stmt->setInt32(2, realmId);
-        LoginDatabase.Execute(stmt);
+        trans->Append(stmt);
     }
+
+    LoginDatabase.CommitTransaction(trans);
 }
 
 rbac::RBACPermission const* AccountMgr::GetRBACPermission(uint32 permissionId) const

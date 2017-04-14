@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +21,7 @@
 #include "Packet.h"
 #include "SharedDefines.h"
 #include "ObjectGuid.h"
+#include "PacketUtilities.h"
 
 class WorldObject;
 
@@ -146,7 +147,7 @@ namespace WorldPackets
         };
 
         // SMSG_CHAT
-        class Chat final : public ServerPacket
+        class TC_GAME_API Chat final : public ServerPacket
         {
         public:
             Chat() : ServerPacket(SMSG_CHAT, 100) { }
@@ -216,7 +217,7 @@ namespace WorldPackets
             int32 EmoteID = 0;
         };
 
-        class PrintNotification final : public ServerPacket
+        class TC_GAME_API PrintNotification final : public ServerPacket
         {
         public:
             PrintNotification(std::string const& notifyText) : ServerPacket(SMSG_PRINT_NOTIFICATION, 2 + notifyText.size()), NotifyText(notifyText) { }
@@ -258,11 +259,16 @@ namespace WorldPackets
         class ChatRegisterAddonPrefixes final : public ClientPacket
         {
         public:
+            enum
+            {
+                MAX_PREFIXES = 64
+            };
+
             ChatRegisterAddonPrefixes(WorldPacket&& packet) : ClientPacket(CMSG_CHAT_REGISTER_ADDON_PREFIXES, std::move(packet)) { }
 
             void Read() override;
 
-            std::vector<std::string> Prefixes;
+            Array<std::string, MAX_PREFIXES> Prefixes;
         };
 
         class ChatUnregisterAllAddonPrefixes final : public ClientPacket
@@ -282,6 +288,37 @@ namespace WorldPackets
 
             int32 ZoneID = 0;
             std::string MessageText;
+        };
+
+        class ChatReportIgnored final : public ClientPacket
+        {
+        public:
+            ChatReportIgnored(WorldPacket&& packet) : ClientPacket(CMSG_CHAT_REPORT_IGNORED, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid IgnoredGUID;
+            uint8 Reason = 0;
+        };
+
+        class ChatPlayerAmbiguous final : public ServerPacket
+        {
+        public:
+            ChatPlayerAmbiguous(std::string const& name) : ServerPacket(SMSG_CHAT_PLAYER_AMBIGUOUS, 2 + name.length()), Name(name) { }
+
+            WorldPacket const* Write() override;
+
+            std::string Name;
+        };
+
+        class ChatRestricted final : public ServerPacket
+        {
+        public:
+            ChatRestricted() : ServerPacket(SMSG_CHAT_RESTRICTED, 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Reason = 0;
         };
     }
 }

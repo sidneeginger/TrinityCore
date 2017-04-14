@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -25,7 +25,7 @@
 
 class GarrisonMap;
 
-class MapInstanced : public Map
+class TC_GAME_API MapInstanced : public Map
 {
     friend class MapManager;
     public:
@@ -39,13 +39,13 @@ class MapInstanced : public Map
         void DelayedUpdate(const uint32 diff) override;
         //void RelocationNotify();
         void UnloadAll() override;
-        bool CanEnter(Player* player) override;
+        EnterState CannotEnter(Player* /*player*/) override;
 
-        Map* CreateInstanceForPlayer(const uint32 mapId, Player* player);
+        Map* CreateInstanceForPlayer(const uint32 mapId, Player* player, uint32 loginInstanceId=0);
         Map* FindInstanceMap(uint32 instanceId) const
         {
             InstancedMaps::const_iterator i = m_InstancedMaps.find(instanceId);
-            return(i == m_InstancedMaps.end() ? NULL : i->second);
+            return(i == m_InstancedMaps.end() ? nullptr : i->second);
         }
         bool DestroyInstance(InstancedMaps::iterator &itr);
 
@@ -66,7 +66,7 @@ class MapInstanced : public Map
         virtual void InitVisibilityDistance() override;
 
     private:
-        InstanceMap* CreateInstance(uint32 InstanceId, InstanceSave* save, Difficulty difficulty);
+        InstanceMap* CreateInstance(uint32 InstanceId, InstanceSave* save, Difficulty difficulty, TeamId team);
         BattlegroundMap* CreateBattleground(uint32 InstanceId, Battleground* bg);
         GarrisonMap* CreateGarrison(uint32 instanceId, Player* owner);
 

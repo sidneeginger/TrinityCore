@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,7 +23,7 @@
 #include <string>
 #include <boost/filesystem.hpp>
 
-class UpdateException : public std::exception
+class TC_DATABASE_API UpdateException : public std::exception
 {
 public:
     UpdateException(std::string const& msg) : _msg(msg) { }
@@ -41,7 +41,7 @@ enum BaseLocation
     LOCATION_DOWNLOAD
 };
 
-struct UpdateResult
+struct TC_DATABASE_API UpdateResult
 {
     UpdateResult()
         : updated(0), recent(0), archived(0) { }
@@ -54,13 +54,22 @@ struct UpdateResult
     size_t archived;
 };
 
+class DBUpdaterUtil
+{
+public:
+    static std::string GetCorrectedMySQLExecutable();
+
+    static bool CheckExecutable();
+
+private:
+    static std::string& corrected_path();
+};
+
 template <class T>
-class DBUpdater
+class TC_DATABASE_API DBUpdater
 {
 public:
     using Path = boost::filesystem::path;
-
-    static std::string GetSourceDirectory();
 
     static inline std::string GetConfigEntry();
 
@@ -79,9 +88,6 @@ public:
     static bool Populate(DatabaseWorkerPool<T>& pool);
 
 private:
-    static std::string GetMySqlCli();
-    static bool CheckExecutable();
-
     static QueryResult Retrieve(DatabaseWorkerPool<T>& pool, std::string const& query);
     static void Apply(DatabaseWorkerPool<T>& pool, std::string const& query);
     static void ApplyFile(DatabaseWorkerPool<T>& pool, Path const& path);

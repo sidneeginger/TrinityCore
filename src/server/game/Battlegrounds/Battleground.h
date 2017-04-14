@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -39,7 +39,7 @@ class WorldObject;
 class WorldPacket;
 class BattlegroundMap;
 
-struct PvPDifficultyEntry;
+struct PvpDifficultyEntry;
 struct WorldSafeLocsEntry;
 
 enum BattlegroundCriteriaId
@@ -232,7 +232,7 @@ This class is used to:
 3. some certain cases, same for all battlegrounds
 4. It has properties same for all battlegrounds
 */
-class Battleground
+class TC_GAME_API Battleground
 {
     public:
         Battleground();
@@ -253,7 +253,7 @@ class Battleground
 
         /* achievement req. */
         virtual bool IsAllNodesControlledByTeam(uint32 /*team*/) const { return false; }
-        void StartTimedAchievement(AchievementCriteriaTimedTypes type, uint32 entry);
+        void StartCriteriaTimer(CriteriaTimedTypes type, uint32 entry);
         virtual bool CheckAchievementCriteriaMeet(uint32 /*criteriaId*/, Player const* /*player*/, Unit const* /*target*/ = NULL, uint32 /*miscvalue1*/ = 0);
 
         /* Battleground */
@@ -290,7 +290,7 @@ class Battleground
         void SetTypeID(BattlegroundTypeId TypeID) { m_TypeID = TypeID; }
         void SetRandomTypeID(BattlegroundTypeId TypeID) { m_RandomTypeID = TypeID; }
         //here we can count minlevel and maxlevel for players
-        void SetBracket(PvPDifficultyEntry const* bracketEntry);
+        void SetBracket(PvpDifficultyEntry const* bracketEntry);
         void SetInstanceID(uint32 InstanceID) { m_InstanceID = InstanceID; }
         void SetStatus(BattlegroundStatus Status) { m_Status = Status; }
         void SetClientInstanceID(uint32 InstanceID) { m_ClientInstanceID = InstanceID; }
@@ -437,6 +437,10 @@ class Battleground
 
         // Death related
         virtual WorldSafeLocsEntry const* GetClosestGraveYard(Player* player);
+
+        virtual WorldSafeLocsEntry const* GetExploitTeleportLocation(Team /*team*/) { return nullptr; }
+        // GetExploitTeleportLocation(TeamId) must be implemented in the battleground subclass.
+        void TeleportPlayerToExploitLocation(Player* player);
 
         virtual void AddPlayer(Player* player);                // must be implemented in BG subclass
 

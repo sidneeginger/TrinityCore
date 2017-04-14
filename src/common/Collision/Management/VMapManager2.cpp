@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2010 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -324,6 +324,11 @@ namespace VMAP
     bool VMapManager2::existsMap(const char* basePath, unsigned int mapId, int x, int y)
     {
         return StaticMapTree::CanLoadMap(std::string(basePath), mapId, x, y);
+    }
+
+    void VMapManager2::getInstanceMapTree(InstanceTreeMap &instanceMapTree)
+    {
+        instanceMapTree = iInstanceMapTrees;
     }
 
 } // namespace VMAP

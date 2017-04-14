@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -34,7 +34,7 @@
 
 #define LOGGER_ROOT "root"
 
-class Log
+class TC_COMMON_API Log
 {
     typedef std::unordered_map<std::string, Logger> LoggerMap;
 
@@ -44,13 +44,10 @@ class Log
 
     public:
 
-        static Log* instance()
-        {
-            static Log instance;
-            return &instance;
-        }
+        static Log* instance();
 
         void Initialize(boost::asio::io_service* ioService);
+        void SetSynchronous();  // Not threadsafe - should only be called from main() after all threads are joined
         void LoadFromConfig();
         void Close();
         bool ShouldLog(std::string const& type, LogLevel level) const;
@@ -169,7 +166,7 @@ inline bool Log::ShouldLog(std::string const& type, LogLevel level) const
         } \
     }
 
-#if PLATFORM != PLATFORM_WINDOWS
+#if TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
 void check_args(const char*, ...) ATTR_PRINTF(1, 2);
 void check_args(std::string const&, ...);
 

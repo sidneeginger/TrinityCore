@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -76,7 +76,7 @@ class SummonScarab : public BasicEvent
 public:
     SummonScarab(Unit* owner, InstanceScript* instance) : _owner(owner), _instance(instance) { }
 
-    bool Execute(uint64 /*execTime*/, uint32 /*diff*/)
+    bool Execute(uint64 /*execTime*/, uint32 /*diff*/) override
     {
         if (!_instance || _instance->GetBossState(DATA_EARTHRAGER_PTAH) != IN_PROGRESS)
             return true;    // delete event
@@ -141,7 +141,7 @@ public:
                 GetCreatureListWithEntryInGrid(stalkers, me, NPC_BEETLE_STALKER, 100.0f);
                 std::list<Creature*> beetlers = stalkers;
 
-                Trinity::Containers::RandomResizeList(beetlers, 9); // Holds the summoners of Jeweled Scarab
+                Trinity::Containers::RandomResize(beetlers, 9); // Holds the summoners of Jeweled Scarab
 
                 for (std::list<Creature*>::iterator itr = beetlers.begin(); itr != beetlers.end(); ++itr)
                 {
@@ -151,7 +151,7 @@ public:
                     (*itr)->m_Events.AddEvent(new SummonScarab((*itr), instance), (*itr)->m_Events.CalculateTime(5000));
                 }
 
-                Trinity::Containers::RandomResizeList(stalkers, 2); // Holds the summoners of Dustbone Horror
+                Trinity::Containers::RandomResize(stalkers, 2); // Holds the summoners of Dustbone Horror
 
                 for (std::list<Creature*>::iterator itr = stalkers.begin(); itr != stalkers.end(); ++itr)
                     (*itr)->CastSpell((*itr), SPELL_SUMMON_DUSTBONE_HORROR);
@@ -263,7 +263,7 @@ class spell_earthrager_ptah_flame_bolt : public SpellScriptLoader
 
             void FilterTargets(std::list<WorldObject*>& targets)
             {
-                Trinity::Containers::RandomResizeList(targets, GetCaster()->GetMap()->IsHeroic() ? 3 : 2);
+                Trinity::Containers::RandomResize(targets, GetCaster()->GetMap()->IsHeroic() ? 3 : 2);
             }
 
             void Register() override
@@ -305,14 +305,14 @@ public:
             }
         }
 
-        void Register()
+        void Register() override
         {
             OnEffectApply += AuraEffectApplyFn(spell_earthrager_ptah_explosion_AuraScript::SetFlags, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
             OnEffectRemove += AuraEffectRemoveFn(spell_earthrager_ptah_explosion_AuraScript::RemoveFlags, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
         }
     };
 
-    AuraScript* GetAuraScript() const
+    AuraScript* GetAuraScript() const override
     {
         return new spell_earthrager_ptah_explosion_AuraScript();
     }

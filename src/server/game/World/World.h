@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -24,12 +24,12 @@
 #define __WORLD_H
 
 #include "Common.h"
-#include "Commands.h"
+#include "Realm/Realm.h"
 #include "ObjectGuid.h"
 #include "Timer.h"
 #include "SharedDefines.h"
 #include "QueryResult.h"
-#include "Callback.h"
+#include "QueryCallbackProcessor.h"
 #include "Realm/Realm.h"
 
 #include <atomic>
@@ -65,7 +65,8 @@ enum ServerMessageType
 enum ShutdownMask
 {
     SHUTDOWN_MASK_RESTART = 1,
-    SHUTDOWN_MASK_IDLE    = 2
+    SHUTDOWN_MASK_IDLE    = 2,
+    SHUTDOWN_MASK_FORCE   = 4
 };
 
 enum ShutdownExitCode
@@ -79,6 +80,7 @@ enum ShutdownExitCode
 enum WorldTimers
 {
     WUPDATE_AUCTIONS,
+    WUPDATE_AUCTIONS_PENDING,
     WUPDATE_WEATHERS,
     WUPDATE_UPTIME,
     WUPDATE_CORPSES,
@@ -90,6 +92,8 @@ enum WorldTimers
     WUPDATE_AHBOT,
     WUPDATE_PINGDB,
     WUPDATE_GUILDSAVE,
+    WUPDATE_BLACKMARKET,
+    WUPDATE_CHECK_FILECHANGES,
     WUPDATE_COUNT
 };
 
@@ -122,7 +126,6 @@ enum WorldBoolConfigs
     CONFIG_QUEST_IGNORE_RAID,
     CONFIG_DETECT_POS_COLLISION,
     CONFIG_RESTRICTED_LFG_CHANNEL,
-    CONFIG_TALENTS_INSPECTING,
     CONFIG_CHAT_FAKE_MESSAGE_PREVENTING,
     CONFIG_DEATH_CORPSE_RECLAIM_DELAY_PVP,
     CONFIG_DEATH_CORPSE_RECLAIM_DELAY_PVE,
@@ -136,7 +139,6 @@ enum WorldBoolConfigs
     CONFIG_BATTLEGROUND_STORE_STATISTICS_ENABLE,
     CONFIG_BG_XP_FOR_KILL,
     CONFIG_ARENA_QUEUE_ANNOUNCER_ENABLE,
-    CONFIG_ARENA_QUEUE_ANNOUNCER_PLAYERONLY,
     CONFIG_ARENA_SEASON_IN_PROGRESS,
     CONFIG_ARENA_LOG_EXTENDED_INFO,
     CONFIG_OFFHAND_CHECK_AT_SPELL_UNLEARN,
@@ -166,6 +168,7 @@ enum WorldBoolConfigs
     CONFIG_WARDEN_ENABLED,
     CONFIG_ENABLE_MMAPS,
     CONFIG_WINTERGRASP_ENABLE,
+    CONFIG_TOLBARAD_ENABLE,
     CONFIG_UI_QUESTLEVELS_IN_DIALOGS,     // Should we add quest levels to the title in the NPC dialogs?
     CONFIG_EVENT_ANNOUNCE,
     CONFIG_STATS_LIMITS_ENABLE,
@@ -176,6 +179,20 @@ enum WorldBoolConfigs
     CONFIG_CALCULATE_GAMEOBJECT_ZONE_AREA_DATA,
     CONFIG_FEATURE_SYSTEM_BPAY_STORE_ENABLED,
     CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_ENABLED,
+    CONFIG_RESET_DUEL_COOLDOWNS,
+    CONFIG_RESET_DUEL_HEALTH_MANA,
+    CONFIG_BASEMAP_LOAD_GRIDS,
+    CONFIG_INSTANCEMAP_LOAD_GRIDS,
+    CONFIG_BLACKMARKET_ENABLED,
+    CONFIG_HOTSWAP_ENABLED,
+    CONFIG_HOTSWAP_RECOMPILER_ENABLED,
+    CONFIG_HOTSWAP_EARLY_TERMINATION_ENABLED,
+    CONFIG_HOTSWAP_BUILD_FILE_RECREATION_ENABLED,
+    CONFIG_HOTSWAP_INSTALL_ENABLED,
+    CONFIG_HOTSWAP_PREFIX_CORRECTION_ENABLED,
+    CONFIG_PREVENT_RENAME_CUSTOMIZATION,
+    CONFIG_CREATURE_CHECK_INVALID_POSITION,
+    CONFIG_GAME_OBJECT_CHECK_INVALID_POSITION,
     BOOL_CONFIG_VALUE_COUNT
 };
 
@@ -184,7 +201,6 @@ enum WorldFloatConfigs
     CONFIG_GROUP_XP_DISTANCE = 0,
     CONFIG_MAX_RECRUIT_A_FRIEND_DISTANCE,
     CONFIG_SIGHT_MONSTER,
-    CONFIG_SIGHT_GUARDER,
     CONFIG_LISTEN_RANGE_SAY,
     CONFIG_LISTEN_RANGE_TEXTEMOTE,
     CONFIG_LISTEN_RANGE_YELL,
@@ -195,6 +211,10 @@ enum WorldFloatConfigs
     CONFIG_STATS_LIMITS_PARRY,
     CONFIG_STATS_LIMITS_BLOCK,
     CONFIG_STATS_LIMITS_CRIT,
+    CONFIG_ARENA_WIN_RATING_MODIFIER_1,
+    CONFIG_ARENA_WIN_RATING_MODIFIER_2,
+    CONFIG_ARENA_LOSE_RATING_MODIFIER,
+    CONFIG_ARENA_MATCHMAKER_RATING_MODIFIER,
     FLOAT_CONFIG_VALUE_COUNT
 };
 
@@ -223,23 +243,21 @@ enum WorldIntConfigs
     CONFIG_CHARACTER_CREATING_DISABLED_CLASSMASK,
     CONFIG_CHARACTERS_PER_ACCOUNT,
     CONFIG_CHARACTERS_PER_REALM,
-    CONFIG_HEROIC_CHARACTERS_PER_REALM,
-    CONFIG_CHARACTER_CREATING_MIN_LEVEL_FOR_HEROIC_CHARACTER,
+    CONFIG_DEATH_KNIGHTS_PER_REALM,
+    CONFIG_CHARACTER_CREATING_MIN_LEVEL_FOR_DEATH_KNIGHT,
+    CONFIG_DEMON_HUNTERS_PER_REALM,
+    CONFIG_CHARACTER_CREATING_MIN_LEVEL_FOR_DEMON_HUNTER,
     CONFIG_SKIP_CINEMATICS,
     CONFIG_MAX_PLAYER_LEVEL,
     CONFIG_MIN_DUALSPEC_LEVEL,
     CONFIG_START_PLAYER_LEVEL,
-    CONFIG_START_HEROIC_PLAYER_LEVEL,
+    CONFIG_START_DEATH_KNIGHT_PLAYER_LEVEL,
+    CONFIG_START_DEMON_HUNTER_PLAYER_LEVEL,
     CONFIG_START_PLAYER_MONEY,
     CONFIG_CURRENCY_START_APEXIS_CRYSTALS,
     CONFIG_CURRENCY_MAX_APEXIS_CRYSTALS,
     CONFIG_CURRENCY_START_JUSTICE_POINTS,
     CONFIG_CURRENCY_MAX_JUSTICE_POINTS,
-    CONFIG_CURRENCY_START_HONOR_POINTS,
-    CONFIG_CURRENCY_MAX_HONOR_POINTS,
-    CONFIG_CURRENCY_START_CONQUEST_POINTS,
-    CONFIG_CURRENCY_CONQUEST_POINTS_WEEK_CAP,
-    CONFIG_CURRENCY_CONQUEST_POINTS_ARENA_REWARD,
     CONFIG_CURRENCY_RESET_HOUR,
     CONFIG_CURRENCY_RESET_DAY,
     CONFIG_CURRENCY_RESET_INTERVAL,
@@ -247,6 +265,7 @@ enum WorldIntConfigs
     CONFIG_MAX_RECRUIT_A_FRIEND_BONUS_PLAYER_LEVEL_DIFFERENCE,
     CONFIG_INSTANCE_RESET_TIME_HOUR,
     CONFIG_INSTANCE_UNLOAD_DELAY,
+    CONFIG_DAILY_QUEST_RESET_TIME_HOUR,
     CONFIG_MAX_PRIMARY_TRADE_SKILL,
     CONFIG_MIN_PETITION_SIGNS,
     CONFIG_GM_LOGIN_STATE,
@@ -257,6 +276,7 @@ enum WorldIntConfigs
     CONFIG_GM_LEVEL_IN_GM_LIST,
     CONFIG_GM_LEVEL_IN_WHO_LIST,
     CONFIG_START_GM_LEVEL,
+    CONFIG_FORCE_SHUTDOWN_THRESHOLD,
     CONFIG_GROUP_VISIBILITY,
     CONFIG_MAIL_DELIVERY_DELAY,
     CONFIG_UPTIME_UPDATE,
@@ -282,7 +302,10 @@ enum WorldIntConfigs
     CONFIG_CHAT_STRICT_LINK_CHECKING_KICK,
     CONFIG_CHAT_CHANNEL_LEVEL_REQ,
     CONFIG_CHAT_WHISPER_LEVEL_REQ,
+    CONFIG_CHAT_EMOTE_LEVEL_REQ,
     CONFIG_CHAT_SAY_LEVEL_REQ,
+    CONFIG_CHAT_YELL_LEVEL_REQ,
+    CONFIG_PARTY_LEVEL_REQ,
     CONFIG_TRADE_LEVEL_REQ,
     CONFIG_AUCTION_LEVEL_REQ,
     CONFIG_MAIL_LEVEL_REQ,
@@ -297,6 +320,7 @@ enum WorldIntConfigs
     CONFIG_BATTLEGROUND_INVITATION_TYPE,
     CONFIG_BATTLEGROUND_PREMATURE_FINISH_TIMER,
     CONFIG_BATTLEGROUND_PREMADE_GROUP_WAIT_FOR_MATCH,
+    CONFIG_BATTLEGROUND_REPORT_AFK,
     CONFIG_ARENA_MAX_RATING_DIFFERENCE,
     CONFIG_ARENA_RATING_DISCARD_TIMER,
     CONFIG_ARENA_RATED_UPDATE_TIMER,
@@ -326,7 +350,8 @@ enum WorldIntConfigs
     CONFIG_CHARDELETE_KEEP_DAYS,
     CONFIG_CHARDELETE_METHOD,
     CONFIG_CHARDELETE_MIN_LEVEL,
-    CONFIG_CHARDELETE_HEROIC_MIN_LEVEL,
+    CONFIG_CHARDELETE_DEATH_KNIGHT_MIN_LEVEL,
+    CONFIG_CHARDELETE_DEMON_HUNTER_MIN_LEVEL,
     CONFIG_AUTOBROADCAST_CENTER,
     CONFIG_AUTOBROADCAST_INTERVAL,
     CONFIG_MAX_RESULTS_LOOKUP_COMMANDS,
@@ -347,6 +372,13 @@ enum WorldIntConfigs
     CONFIG_WINTERGRASP_BATTLETIME,
     CONFIG_WINTERGRASP_NOBATTLETIME,
     CONFIG_WINTERGRASP_RESTART_AFTER_CRASH,
+    CONFIG_TOLBARAD_PLR_MAX,
+    CONFIG_TOLBARAD_PLR_MIN,
+    CONFIG_TOLBARAD_PLR_MIN_LVL,
+    CONFIG_TOLBARAD_BATTLETIME,
+    CONFIG_TOLBARAD_BONUSTIME,
+    CONFIG_TOLBARAD_NOBATTLETIME,
+    CONFIG_TOLBARAD_RESTART_AFTER_CRASH,
     CONFIG_GUILD_SAVE_INTERVAL,
     CONFIG_GUILD_UNDELETABLE_LEVEL,
     CONFIG_PACKET_SPOOF_POLICY,
@@ -360,6 +392,7 @@ enum WorldIntConfigs
     CONFIG_BG_REWARD_WINNER_CONQUEST_FIRST,
     CONFIG_BG_REWARD_WINNER_CONQUEST_LAST,
     CONFIG_CREATURE_PICKPOCKET_REFILL,
+    CONFIG_CREATURE_STOP_FOR_PLAYER,
     CONFIG_AHBOT_UPDATE_INTERVAL,
     CONFIG_FEATURE_SYSTEM_CHARACTER_UNDELETE_COOLDOWN,
     CONFIG_CHARTER_COST_GUILD,
@@ -368,6 +401,11 @@ enum WorldIntConfigs
     CONFIG_CHARTER_COST_ARENA_5v5,
     CONFIG_NO_GRAY_AGGRO_ABOVE,
     CONFIG_NO_GRAY_AGGRO_BELOW,
+    CONFIG_AUCTION_GETALL_DELAY,
+    CONFIG_AUCTION_SEARCH_DELAY,
+    CONFIG_TALENTS_INSPECTING,
+    CONFIG_BLACKMARKET_MAXAUCTIONS,
+    CONFIG_BLACKMARKET_UPDATE_PERIOD,
     INT_CONFIG_VALUE_COUNT
 };
 
@@ -378,10 +416,20 @@ enum Rates
     RATE_POWER_MANA,
     RATE_POWER_RAGE_INCOME,
     RATE_POWER_RAGE_LOSS,
-    RATE_POWER_RUNICPOWER_INCOME,
-    RATE_POWER_RUNICPOWER_LOSS,
     RATE_POWER_FOCUS,
     RATE_POWER_ENERGY,
+    RATE_POWER_COMBO_POINTS_LOSS,
+    RATE_POWER_RUNIC_POWER_INCOME,
+    RATE_POWER_RUNIC_POWER_LOSS,
+    RATE_POWER_SOUL_SHARDS,
+    RATE_POWER_LUNAR_POWER,
+    RATE_POWER_HOLY_POWER,
+    RATE_POWER_MAELSTROM,
+    RATE_POWER_CHI,
+    RATE_POWER_INSANITY,
+    RATE_POWER_ARCANE_CHARGES,
+    RATE_POWER_FURY,
+    RATE_POWER_PAIN,
     RATE_SKILL_DISCOVERY,
     RATE_DROP_ITEM_POOR,
     RATE_DROP_ITEM_NORMAL,
@@ -394,6 +442,7 @@ enum Rates
     RATE_DROP_ITEM_REFERENCED_AMOUNT,
     RATE_DROP_MONEY,
     RATE_XP_KILL,
+    RATE_XP_BG_KILL,
     RATE_XP_QUEST,
     RATE_XP_GUILD_MODIFIER,
     RATE_XP_EXPLORE,
@@ -441,32 +490,6 @@ enum Rates
     MAX_RATES
 };
 
-/// Can be used in SMSG_AUTH_RESPONSE packet
-enum BillingPlanFlags
-{
-    SESSION_NONE            = 0x00,
-    SESSION_UNUSED          = 0x01,
-    SESSION_RECURRING_BILL  = 0x02,
-    SESSION_FREE_TRIAL      = 0x04,
-    SESSION_IGR             = 0x08,
-    SESSION_USAGE           = 0x10,
-    SESSION_TIME_MIXTURE    = 0x20,
-    SESSION_RESTRICTED      = 0x40,
-    SESSION_ENABLE_CAIS     = 0x80
-};
-
-/// Type of server, this is values from second column of Cfg_Configs.dbc
-enum RealmType
-{
-    REALM_TYPE_NORMAL       = 0,
-    REALM_TYPE_PVP          = 1,
-    REALM_TYPE_NORMAL2      = 4,
-    REALM_TYPE_RP           = 6,
-    REALM_TYPE_RPPVP        = 8,
-    REALM_TYPE_FFA_PVP      = 16                            // custom, free for all pvp mode like arena PvP in all zones except rest activated places and sanctuaries
-                                                            // replaced by REALM_PVP in realm list
-};
-
 enum RealmZone
 {
     REALM_ZONE_UNKNOWN       = 0,                           // any language
@@ -511,6 +534,7 @@ enum RealmZone
 
 enum WorldStates
 {
+    WS_CURRENCY_RESET_TIME      = 20001,                     // Next currency reset time
     WS_WEEKLY_QUEST_RESET_TIME  = 20002,                     // Next weekly reset time
     WS_BG_DAILY_RESET_TIME      = 20003,                     // Next daily BG reset time
     WS_CLEANING_FLAGS           = 20004,                     // Cleaning Flags
@@ -520,7 +544,7 @@ enum WorldStates
     WS_GUILD_WEEKLY_RESET_TIME  = 20050,                     // Next guild week reset time
 };
 
-#define MAX_CHARACTERS_PER_REALM 11
+#define MAX_CHARACTERS_PER_REALM 12
 
 /// Storage class for commands issued for delayed execution
 struct CliCommandHolder
@@ -551,6 +575,7 @@ typedef std::unordered_map<uint32, WorldSession*> SessionMap;
 struct CharacterInfo
 {
     std::string Name;
+    uint32 AccountId;
     uint8 Class;
     uint8 Race;
     uint8 Sex;
@@ -559,20 +584,16 @@ struct CharacterInfo
 };
 
 /// The World
-class World
+class TC_GAME_API World
 {
     public:
-        static World* instance()
-        {
-            static World instance;
-            return &instance;
-        }
+        static World* instance();
 
         static std::atomic<uint32> m_worldLoopCounter;
 
         WorldSession* FindSession(uint32 id) const;
         void AddSession(WorldSession* s);
-        void AddInstanceSocket(std::shared_ptr<WorldSocket> sock, uint32 sessionAccountId);
+        void AddInstanceSocket(std::weak_ptr<WorldSocket> sock, uint64 connectToKey);
         void SendAutoBroadcast();
         bool RemoveSession(uint32 id);
         /// Get the number of current active sessions
@@ -678,7 +699,7 @@ class World
         bool IsShuttingDown() const { return m_ShutdownTimer > 0; }
         uint32 GetShutDownTimeLeft() const { return m_ShutdownTimer; }
         void ShutdownServ(uint32 time, uint32 options, uint8 exitcode, const std::string& reason = std::string());
-        void ShutdownCancel();
+        uint32 ShutdownCancel();
         void ShutdownMsg(bool show = false, Player* player = NULL, const std::string& reason = std::string());
         static uint8 GetExitCode() { return m_ExitCode; }
         static void StopNow(uint8 exitcode) { m_stopEvent = true; m_ExitCode = exitcode; }
@@ -731,8 +752,8 @@ class World
             return index < INT_CONFIG_VALUE_COUNT ? m_int_configs[index] : 0;
         }
 
-        void setWorldState(uint32 index, uint64 value);
-        uint64 getWorldState(uint32 index) const;
+        void setWorldState(uint32 index, uint32 value);
+        uint32 getWorldState(uint32 index) const;
         void LoadWorldStates();
 
         /// Are we on a "Player versus Player" server?
@@ -777,7 +798,7 @@ class World
         void UpdateAreaDependentAuras();
 
         CharacterInfo const* GetCharacterInfo(ObjectGuid const& guid) const;
-        void AddCharacterInfo(ObjectGuid const& guid, std::string const& name, uint8 gender, uint8 race, uint8 playerClass, uint8 level, bool isDeleted);
+        void AddCharacterInfo(ObjectGuid const& guid, uint32 accountId, std::string const& name, uint8 gender, uint8 race, uint8 playerClass, uint8 level, bool isDeleted);
         void DeleteCharacterInfo(ObjectGuid const& guid) { _characterInfoStore.erase(guid); }
         bool HasCharacterInfo(ObjectGuid const& guid) { return _characterInfoStore.find(guid) != _characterInfoStore.end(); }
         void UpdateCharacterInfo(ObjectGuid const& guid, std::string const& name, uint8 gender = GENDER_NONE, uint8 race = RACE_NONE);
@@ -788,15 +809,16 @@ class World
         void   SetCleaningFlags(uint32 flags) { m_CleaningFlags = flags; }
         void   ResetEventSeasonalQuests(uint16 event_id);
 
-        void UpdatePhaseDefinitions();
         void ReloadRBAC();
+
+        void RemoveOldCorpses();
 
     protected:
         void _UpdateGameTime();
         // callback for UpdateRealmCharacters
         void _UpdateRealmCharCount(PreparedQueryResult resultCharCount);
 
-        void InitDailyQuestResetTime();
+        void InitDailyQuestResetTime(bool loading = true);
         void InitWeeklyQuestResetTime();
         void InitMonthlyQuestResetTime();
         void InitRandomBGResetTime();
@@ -826,6 +848,7 @@ class World
         IntervalTimer m_timers[WUPDATE_COUNT];
         time_t mail_timer;
         time_t mail_timer_expires;
+        time_t blackmarket_timer;
         uint32 m_updateTime, m_updateTimeSum;
         uint32 m_updateTimeCount;
         uint32 m_currentTime;
@@ -844,7 +867,7 @@ class World
         uint32 m_int_configs[INT_CONFIG_VALUE_COUNT];
         bool m_bool_configs[BOOL_CONFIG_VALUE_COUNT];
         float m_float_configs[FLOAT_CONFIG_VALUE_COUNT];
-        typedef std::map<uint32, uint64> WorldStatesMap;
+        typedef std::map<uint32, uint32> WorldStatesMap;
         WorldStatesMap m_worldstates;
         uint32 m_playerLimit;
         AccountTypes m_allowedSecurityLevel;
@@ -881,30 +904,33 @@ class World
         void AddSession_(WorldSession* s);
         LockedQueue<WorldSession*> addSessQueue;
 
-        void ProcessLinkInstanceSocket(std::pair<std::shared_ptr<WorldSocket>, uint32> linkInfo);
-        LockedQueue<std::pair<std::shared_ptr<WorldSocket>, uint32>> _linkSocketQueue;
+        void ProcessLinkInstanceSocket(std::pair<std::weak_ptr<WorldSocket>, uint64> linkInfo);
+        LockedQueue<std::pair<std::weak_ptr<WorldSocket>, uint64>> _linkSocketQueue;
 
         // used versions
         std::string m_DBVersion;
 
-        typedef std::map<uint8, std::string> AutobroadcastsMap;
-        AutobroadcastsMap m_Autobroadcasts;
-
-        typedef std::map<uint8, uint8> AutobroadcastsWeightMap;
-        AutobroadcastsWeightMap m_AutobroadcastsWeights;
+        struct Autobroadcast
+        {
+            std::string Message;
+            uint8 Weight;
+        };
+        typedef std::unordered_map<uint8, Autobroadcast> AutobroadcastContainer;
+        AutobroadcastContainer m_Autobroadcasts;
 
         typedef std::map<ObjectGuid, CharacterInfo> CharacterInfoContainer;
         CharacterInfoContainer _characterInfoStore;
         void LoadCharacterInfoStore();
 
         void ProcessQueryCallbacks();
-        std::deque<PreparedQueryResultFuture> m_realmCharCallbacks;
+        QueryCallbackProcessor _queryProcessor;
 };
 
-extern Battlenet::RealmHandle realmHandle;
-extern Realm realm;
-uint32 GetVirtualRealmAddress();
+TC_GAME_API extern Realm realm;
+
+TC_GAME_API uint32 GetVirtualRealmAddress();
 
 #define sWorld World::instance()
+
 #endif
 /// @}

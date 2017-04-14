@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -19,7 +19,6 @@
 #include "Common.h"
 #include "Corpse.h"
 #include "Player.h"
-#include "UpdateMask.h"
 #include "ObjectAccessor.h"
 #include "DatabaseEnv.h"
 
@@ -61,7 +60,6 @@ void Corpse::RemoveFromWorld()
 
 bool Corpse::Create(ObjectGuid::LowType guidlow, Map* map)
 {
-    SetMap(map);
     Object::_Create(ObjectGuid::Create<HighGuid::Corpse>(map->GetId(), 0, guidlow));
     return true;
 }
@@ -79,17 +77,13 @@ bool Corpse::Create(ObjectGuid::LowType guidlow, Player* owner)
         return false;
     }
 
-    //we need to assign owner's map for corpse
-    //in other way we will get a crash in Corpse::SaveToDB()
-    SetMap(owner->GetMap());
-
     Object::_Create(ObjectGuid::Create<HighGuid::Corpse>(GetMapId(), 0, guidlow));
     SetPhaseMask(owner->GetPhaseMask(), false);
 
     SetObjectScale(1.0f);
     SetGuidValue(CORPSE_FIELD_OWNER, owner->GetGUID());
 
-    _gridCoord = Trinity::ComputeGridCoord(GetPositionX(), GetPositionY());
+    _cellCoord = Trinity::ComputeCellCoord(GetPositionX(), GetPositionY());
 
     CopyPhaseFrom(owner);
 
@@ -125,7 +119,7 @@ void Corpse::SaveToDB()
     {
         index = 0;
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CORPSE_PHASES);
-        stmt->setUInt32(index++, GetOwnerGUID().GetCounter());                        // OwnerGuid
+        stmt->setUInt64(index++, GetOwnerGUID().GetCounter());                        // OwnerGuid
         stmt->setUInt32(index++, phaseId);                                            // PhaseId
         trans->Append(stmt);
     }
@@ -133,29 +127,20 @@ void Corpse::SaveToDB()
     CharacterDatabase.CommitTransaction(trans);
 }
 
-void Corpse::DeleteBonesFromWorld()
-{
-    ASSERT(GetType() == CORPSE_BONES);
-    Corpse* corpse = ObjectAccessor::GetCorpse(*this, GetGUID());
-
-    if (!corpse)
-    {
-        TC_LOG_ERROR("entities.player", "Bones %s not found in world.", GetGUID().ToString().c_str());
-        return;
-    }
-
-    AddObjectToRemoveList();
-}
-
 void Corpse::DeleteFromDB(SQLTransaction& trans)
 {
+    DeleteFromDB(GetOwnerGUID(), trans);
+}
+
+void Corpse::DeleteFromDB(ObjectGuid const& ownerGuid, SQLTransaction& trans)
+{
     PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CORPSE);
-    stmt->setUInt64(0, GetOwnerGUID().GetCounter());
-    trans->Append(stmt);
+    stmt->setUInt64(0, ownerGuid.GetCounter());
+    CharacterDatabase.ExecuteOrAppend(trans, stmt);
 
     stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CORPSE_PHASES);
-    stmt->setUInt64(0, GetOwnerGUID().GetCounter());
-    trans->Append(stmt);
+    stmt->setUInt64(0, ownerGuid.GetCounter());
+    CharacterDatabase.ExecuteOrAppend(trans, stmt);
 }
 
 bool Corpse::LoadCorpseFromDB(ObjectGuid::LowType guid, Field* fields)
@@ -173,7 +158,7 @@ bool Corpse::LoadCorpseFromDB(ObjectGuid::LowType guid, Field* fields)
 
     SetObjectScale(1.0f);
     SetUInt32Value(CORPSE_FIELD_DISPLAY_ID, fields[5].GetUInt32());
-    _LoadIntoDataField(fields[6].GetCString(), CORPSE_FIELD_ITEM, EQUIPMENT_SLOT_END);
+    _LoadIntoDataField(fields[6].GetString(), CORPSE_FIELD_ITEM, EQUIPMENT_SLOT_END);
     SetUInt32Value(CORPSE_FIELD_BYTES_1, fields[7].GetUInt32());
     SetUInt32Value(CORPSE_FIELD_BYTES_2, fields[8].GetUInt32());
     SetUInt32Value(CORPSE_FIELD_FLAGS, fields[9].GetUInt8());
@@ -196,12 +181,16 @@ bool Corpse::LoadCorpseFromDB(ObjectGuid::LowType guid, Field* fields)
         return false;
     }
 
-    _gridCoord = Trinity::ComputeGridCoord(GetPositionX(), GetPositionY());
+    _cellCoord = Trinity::ComputeCellCoord(GetPositionX(), GetPositionY());
     return true;
 }
 
 bool Corpse::IsExpired(time_t t) const
 {
+    // Deleted character
+    if (!sWorld->GetCharacterInfo(GetOwnerGUID()))
+        return true;
+
     if (m_type == CORPSE_BONES)
         return m_time < t - 60 * MINUTE;
     else

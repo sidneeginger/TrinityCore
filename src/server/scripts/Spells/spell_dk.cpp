@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 TrinityCore <http://www.trinitycore.org/>
+ * Copyright (C) 2008-2017 TrinityCore <http://www.trinitycore.org/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -77,6 +77,45 @@ enum DeathKnightSpells
     SPELL_DK_WILL_OF_THE_NECROPOLIS             = 157335
 };
 
+// 70656 - Advantage (T10 4P Melee Bonus)
+class spell_dk_advantage_t10_4p : public SpellScriptLoader
+{
+public:
+    spell_dk_advantage_t10_4p() : SpellScriptLoader("spell_dk_advantage_t10_4p") { }
+
+    class spell_dk_advantage_t10_4p_AuraScript : public AuraScript
+    {
+        PrepareAuraScript(spell_dk_advantage_t10_4p_AuraScript);
+
+        bool CheckProc(ProcEventInfo& eventInfo)
+        {
+            if (Unit* caster = eventInfo.GetActor())
+            {
+                if (caster->GetTypeId() != TYPEID_PLAYER || caster->getClass() != CLASS_DEATH_KNIGHT)
+                    return false;
+
+                for (uint8 i = 0; i < MAX_RUNES; ++i)
+                    if (caster->ToPlayer()->GetRuneCooldown(i) == 0)
+                        return false;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        void Register() override
+        {
+            DoCheckProc += AuraCheckProcFn(spell_dk_advantage_t10_4p_AuraScript::CheckProc);
+        }
+    };
+
+    AuraScript* GetAuraScript() const override
+    {
+        return new spell_dk_advantage_t10_4p_AuraScript();
+    }
+};
+
 // 48707 - Anti-Magic Shell
 /// 6.x
 class spell_dk_anti_magic_shell : public SpellScriptLoader
@@ -149,7 +188,7 @@ class spell_dk_anti_magic_shell : public SpellScriptLoader
                     {
                         // Cannot reduce cooldown by more than 50%
                         int32 val = std::min(glyph->GetAmount(), int32(absorbedAmount) * 100 / maxHealth);
-                        player->GetSpellHistory()->ModifyCooldown(GetId(), -int32(player->GetSpellHistory()->GetRemainingCooldown(GetId()) * val / 100));
+                        player->GetSpellHistory()->ModifyCooldown(GetId(), -int32(player->GetSpellHistory()->GetRemainingCooldown(GetSpellInfo()) * val / 100));
                     }
             }
 
@@ -1167,6 +1206,7 @@ public:
 
 void AddSC_deathknight_spell_scripts()
 {
+    new spell_dk_advantage_t10_4p();
     new spell_dk_anti_magic_shell();
     new spell_dk_army_periodic_taunt();
     new spell_dk_army_transform();
