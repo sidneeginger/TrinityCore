@@ -16,8 +16,11 @@
  */
 
 #include "ScriptMgr.h"
-#include "InstanceScript.h"
 #include "arcatraz.h"
+#include "Creature.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "Map.h"
 
 DoorData const doorData[] =
 {
@@ -207,4 +210,3 @@ void AddSC_instance_arcatraz()
 {
     new instance_arcatraz();
 }
-

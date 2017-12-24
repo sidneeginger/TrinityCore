@@ -18,6 +18,8 @@
 #ifndef SHADOW_LABYRINTH_H_
 #define SHADOW_LABYRINTH_H_
 
+#include "CreatureAIImpl.h"
+
 #define SLScriptName "instance_shadow_labyrinth"
 #define DataHeader "SL"
 
@@ -54,11 +56,10 @@ enum SLMisc
     ACTION_AMBASSADOR_HELLMAW_BANISH    = 2,
 };
 
-template<class AI>
-AI* GetShadowLabyrinthAI(Creature* creature)
+template<typename AI>
+inline AI* GetShadowLabyrinthAI(Creature* creature)
 {
     return GetInstanceAI<AI>(creature, SLScriptName);
 }
 
 #endif // SHADOW_LABYRINTH_H_
-

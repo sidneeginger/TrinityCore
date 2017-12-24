@@ -34,8 +34,7 @@ struct NpcText
 
 struct PageTextLocale
 {
-    StringVector Text;
+    std::vector<std::string> Text;
 };
 
 #endif
-

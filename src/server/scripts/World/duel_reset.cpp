@@ -18,7 +18,10 @@
 #include "ScriptMgr.h"
 #include "Player.h"
 #include "Pet.h"
+#include "SpellHistory.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "World.h"
 
 class DuelResetScript : public PlayerScript
 {
@@ -136,4 +139,3 @@ void AddSC_duel_reset()
 {
     new DuelResetScript();
 }
-

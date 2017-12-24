@@ -138,6 +138,14 @@ enum AreaFlags
     AREA_FLAG_UNK9                  = 0x40000000
 };
 
+enum AreaMountFlags
+{
+    AREA_MOUNT_FLAG_GROUND_ALLOWED      = 0x1,
+    AREA_MOUNT_FLAG_FLYING_ALLOWED      = 0x2,
+    AREA_MOUNT_FLAG_FLOAT_ALLOWED       = 0x4,
+    AREA_MOUNT_FLAG_UNDERWATER_ALLOWED  = 0x8
+};
+
 enum ArtifactPowerFlag : uint8
 {
     ARTIFACT_POWER_FLAG_GOLD                        = 0x01,
@@ -147,7 +155,7 @@ enum ArtifactPowerFlag : uint8
     ARTIFACT_POWER_FLAG_DONT_COUNT_FIRST_BONUS_RANK = 0x10,
 };
 
-#define BATTLE_PET_SPECIES_MAX_ID 2051
+#define BATTLE_PET_SPECIES_MAX_ID 2073
 
 enum ChrSpecializationFlag
 {
@@ -245,6 +253,8 @@ enum CriteriaAdditionalCondition
     CRITERIA_ADDITIONAL_CONDITION_GARRISON_MISSION_TYPE         = 167, // NYI
     CRITERIA_ADDITIONAL_CONDITION_PLAYER_ITEM_LEVEL             = 169, // NYI
     CRITERIA_ADDITIONAL_CONDITION_GARRISON_FOLLOWER_ILVL        = 184,
+    CRITERIA_ADDITIONAL_CONDITION_HONOR_LEVEL                   = 193,
+    CRITERIA_ADDITIONAL_CONDITION_PRESTIGE_LEVEL                = 194
 };
 
 enum CriteriaFlags
@@ -257,7 +267,7 @@ enum CriteriaFlags
     CRITERIA_FLAG_MONEY_COUNTER     = 0x00000020    // Displays counter as money
 };
 
-enum CriteriaTimedTypes
+enum CriteriaTimedTypes : uint8
 {
     CRITERIA_TIMED_TYPE_EVENT           = 1,    // Timer is started by internal event with id in timerStartEvent
     CRITERIA_TIMED_TYPE_QUEST           = 2,    // Timer is started by accepting quest with entry in timerStartEvent
@@ -272,7 +282,7 @@ enum CriteriaTimedTypes
     CRITERIA_TIMED_TYPE_MAX
 };
 
-enum CriteriaTypes
+enum CriteriaTypes : uint8
 {
     CRITERIA_TYPE_KILL_CREATURE                         = 0,
     CRITERIA_TYPE_WIN_BG                                = 1,
@@ -477,9 +487,10 @@ enum CriteriaTypes
     // 202 - 0 criterias (Legion - 23420)
     CRITERIA_TYPE_COMPLETE_WORLD_QUEST                  = 203,
     // 204 - Special criteria type to award players for some external events? Comes with what looks like an identifier, so guessing it's not unique.
+    CRITERIA_TYPE_TRANSMOG_SET_UNLOCKED                 = 205
 };
 
-#define CRITERIA_TYPE_TOTAL 205
+#define CRITERIA_TYPE_TOTAL 208
 
 enum CriteriaTreeFlags : uint16
 {
@@ -501,6 +512,20 @@ enum CriteriaTreeOperator : uint8
     CRITERIA_TREE_OPERATOR_COUNT_DIRECT_CHILDREN    = 7,
     CRITERIA_TREE_OPERATOR_ANY                      = 8,
     CRITERIA_TREE_OPERATOR_SUM_CHILDREN_WEIGHT      = 9
+};
+
+enum class CharBaseSectionVariation : uint8
+{
+    Skin           = 0,
+    Face           = 1,
+    FacialHair     = 2,
+    Hair           = 3,
+    Underwear      = 4,
+    CustomDisplay1 = 5,
+    CustomDisplay2 = 6,
+    CustomDisplay3 = 7,
+
+    Count
 };
 
 enum CharSectionFlags
@@ -527,7 +552,9 @@ enum CharSectionType
     SECTION_TYPE_CUSTOM_DISPLAY_2_LOW_RES = 12,
     SECTION_TYPE_CUSTOM_DISPLAY_2 = 13,
     SECTION_TYPE_CUSTOM_DISPLAY_3_LOW_RES = 14,
-    SECTION_TYPE_CUSTOM_DISPLAY_3 = 15
+    SECTION_TYPE_CUSTOM_DISPLAY_3 = 15,
+
+    SECTION_TYPE_MAX
 };
 
 enum Curves
@@ -557,11 +584,14 @@ enum Difficulty : uint8
     DIFFICULTY_EVENT_DUNGEON        = 19,
     DIFFICULTY_EVENT_SCENARIO       = 20,
     DIFFICULTY_MYTHIC               = 23,
-    DIFFICULTY_TIMEWALKER           = 24,
+    DIFFICULTY_TIMEWALKING          = 24,
     DIFFICULTY_WORLD_PVP_SCENARIO   = 25,
     DIFFICULTY_5_MAN_SCENARIO_N     = 26,
     DIFFICULTY_20_MAN_SCENARIO_N    = 27,
     DIFFICULTY_PVEVP_SCENARIO       = 29,
+    DIFFICULTY_EVENT_SCENARIO_6     = 30,
+    DIFFICULTY_WORLD_PVP_SCENARIO_2 = 32,
+    DIFFICULTY_TIMEWALKING_RAID     = 33,
 
     MAX_DIFFICULTY
 };
@@ -599,6 +629,7 @@ enum SpawnMask
 
 enum FactionTemplateFlags
 {
+    FACTION_TEMPLATE_ENEMY_SPAR             = 0x00000020,   // guessed, sparring with enemies?
     FACTION_TEMPLATE_FLAG_PVP               = 0x00000800,   // flagged for PvP
     FACTION_TEMPLATE_FLAG_CONTESTED_GUARD   = 0x00001000,   // faction will attack players that were involved in PvP combats
     FACTION_TEMPLATE_FLAG_HOSTILE_BY_DEFAULT= 0x00002000
@@ -612,6 +643,10 @@ enum FactionMasks
     FACTION_MASK_MONSTER  = 8                               // aggressive creature from monster team
     // if none flags set then non-aggressive creature
 };
+
+#define MAX_ITEM_PROTO_FLAGS 3
+#define MAX_ITEM_PROTO_SOCKETS 3
+#define MAX_ITEM_PROTO_STATS  10
 
 enum MapTypes                                               // Lua_IsInInstance
 {
@@ -658,7 +693,8 @@ enum ItemEnchantmentType
     ITEM_ENCHANTMENT_TYPE_ARTIFACT_POWER_BONUS_RANK_BY_TYPE = 9,
     ITEM_ENCHANTMENT_TYPE_ARTIFACT_POWER_BONUS_RANK_BY_ID   = 10,
     ITEM_ENCHANTMENT_TYPE_BONUS_LIST_ID                     = 11,
-    ITEM_ENCHANTMENT_TYPE_BONUS_LIST_CURVE                  = 12
+    ITEM_ENCHANTMENT_TYPE_BONUS_LIST_CURVE                  = 12,
+    ITEM_ENCHANTMENT_TYPE_ARTIFACT_POWER_BONUS_RANK_PICKER  = 13
 };
 
 enum ItemExtendedCostFlags
@@ -686,7 +722,10 @@ enum ItemBonusType
     ITEM_BONUS_SCALING_STAT_DISTRIBUTION    = 11,
     ITEM_BONUS_DISENCHANT_LOOT_ID           = 12,
     ITEM_BONUS_SCALING_STAT_DISTRIBUTION_2  = 13,
-    ITEM_BONUS_ITEM_LEVEL_OVERRIDE          = 14
+    ITEM_BONUS_ITEM_LEVEL_CAN_INCREASE      = 14,                 // Displays a + next to item level indicating it can warforge
+    ITEM_BONUS_RANDOM_ENCHANTMENT           = 15,                 // Responsible for showing "<Random additional stats>" or "+%d Rank Random Minor Trait" in the tooltip before item is obtained
+    ITEM_BONUS_BONDING                      = 16,
+    ITEM_BONUS_RELIC_TYPE                   = 17
 };
 
 enum ItemLimitCategoryMode
@@ -746,10 +785,18 @@ enum ItemSpecStat
     ITEM_SPEC_STAT_NONE             = 40
 };
 
+enum MapDifficultyFlags : uint8
+{
+    MAP_DIFFICULTY_FLAG_CANNOT_EXTEND   = 0x10
+};
+
 enum MountCapabilityFlags
 {
-    MOUNT_CAPABILITY_FLAG_CAN_PITCH     = 0x4,                    // client checks MOVEMENTFLAG2_FULL_SPEED_PITCHING
-    MOUNT_CAPABILITY_FLAG_CAN_SWIM      = 0x8,                    // client checks MOVEMENTFLAG_SWIMMING
+    MOUNT_CAPABILITY_FLAG_GROUND                = 0x1,
+    MOUNT_CAPABILITY_FLAG_FLYING                = 0x2,
+    MOUNT_CAPABILITY_FLAG_FLOAT                 = 0x4,
+    MOUNT_CAPABILITY_FLAG_UNDERWATER            = 0x8,
+    MOUNT_CAPABIILTY_FLAG_IGNORE_RESTRICTIONS   = 0x20,
 };
 
 enum MountFlags
@@ -759,6 +806,11 @@ enum MountFlags
     MOUNT_FLAG_PREFERRED_SWIMMING       = 0x10,
     MOUNT_FLAG_PREFERRED_WATER_WALKING  = 0x20,
     MOUNT_FLAG_HIDE_IF_UNKNOWN          = 0x40
+};
+
+enum PrestigeLevelInfoFlags : uint8
+{
+    PRESTIGE_FLAG_DISABLED  = 0x01                      // Prestige levels with this flag won't be included to calculate max prestigelevel.
 };
 
 enum QuestPackageFilter
@@ -790,6 +842,21 @@ enum SpellCategoryFlags
     SPELL_CATEGORY_FLAG_COOLDOWN_SCALES_WITH_WEAPON_SPEED   = 0x01, // unused
     SPELL_CATEGORY_FLAG_COOLDOWN_STARTS_ON_EVENT            = 0x04,
     SPELL_CATEGORY_FLAG_COOLDOWN_EXPIRES_AT_DAILY_RESET     = 0x08
+};
+
+#define MAX_SPELL_EFFECTS 32
+#define MAX_EFFECT_MASK 0xFFFFFFFF
+
+#define MAX_SPELL_AURA_INTERRUPT_FLAGS 2
+
+enum SpellItemEnchantmentFlags
+{
+    ENCHANTMENT_CAN_SOULBOUND           = 0x01,
+    ENCHANTMENT_UNK1                    = 0x02,
+    ENCHANTMENT_UNK2                    = 0x04,
+    ENCHANTMENT_UNK3                    = 0x08,
+    ENCHANTMENT_COLLECTABLE             = 0x100,
+    ENCHANTMENT_HIDE_IF_NOT_COLLECTED   = 0x200,
 };
 
 enum SpellProcsPerMinuteModType
@@ -886,6 +953,9 @@ enum SummonPropFlags
     SUMMON_PROP_FLAG_UNK21           = 0x00100000           // Totems
 };
 
+#define MAX_TALENT_TIERS 7
+#define MAX_TALENT_COLUMNS 3
+
 enum TaxiNodeFlags
 {
     TAXI_NODE_FLAG_ALLIANCE             = 0x01,
@@ -956,15 +1026,6 @@ enum CurrencyTypes
     CURRENCY_TYPE_VALOR_POINTS          = 396,
     CURRENCY_TYPE_APEXIS_CRYSTALS       = 823,
     CURRENCY_TYPE_ARTIFACT_KNOWLEDGE    = 1171,
-};
-
-enum SceneFlags
-{
-    SCENEFLAG_UNK1              = 0x01,
-    SCENEFLAG_UNK2              = 0x02,
-    SCENEFLAG_NOT_CANCELABLE    = 0x04,
-    SCENEFLAG_UNK8              = 0x08,
-    SCENEFLAG_UNK16             = 0x10, // 16, most common value
 };
 
 #endif

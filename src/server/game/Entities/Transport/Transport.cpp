@@ -16,17 +16,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Common.h"
 #include "Transport.h"
-#include "MapManager.h"
-#include "ObjectMgr.h"
-#include "ScriptMgr.h"
-#include "GameObjectAI.h"
-#include "Vehicle.h"
-#include "Player.h"
 #include "Cell.h"
 #include "CellImpl.h"
+#include "Common.h"
+#include "GameObjectAI.h"
+#include "Log.h"
+#include "MapManager.h"
+#include "ObjectMgr.h"
+#include "Player.h"
+#include "ScriptMgr.h"
+#include "Spline.h"
 #include "Totem.h"
+#include "UpdateData.h"
+#include "Vehicle.h"
+#include <G3D/Vector3.h>
 
 Transport::Transport() : GameObject(),
     _transportInfo(NULL), _isMoving(true), _pendingStop(false),
@@ -95,8 +99,8 @@ bool Transport::Create(ObjectGuid::LowType guidlow, uint32 entry, uint32 mapid, 
     SetGoType(GAMEOBJECT_TYPE_MAP_OBJ_TRANSPORT);
     SetGoAnimProgress(animprogress);
     SetName(goinfo->name);
-    SetWorldRotation(G3D::Quat());
-    SetParentRotation(G3D::Quat());
+    SetWorldRotation(0.0f, 0.0f, 0.0f, 1.0f);
+    SetParentRotation(QuaternionData());
 
     m_model = CreateModel();
     return true;
@@ -130,6 +134,7 @@ void Transport::Update(uint32 diff)
         m_goValue.Transport.PathProgress += diff;
 
     uint32 timer = m_goValue.Transport.PathProgress % GetTransportPeriod();
+    bool justStopped = false;
 
     // Set current waypoint
     // Desired outcome: _currentFrame->DepartureTime < timer < _nextFrame->ArriveTime
@@ -148,6 +153,7 @@ void Transport::Update(uint32 diff)
             if (timer < _currentFrame->DepartureTime)
             {
                 SetMoving(false);
+                justStopped = true;
                 if (_pendingStop && GetGoState() != GO_STATE_READY)
                 {
                     SetGoState(GO_STATE_READY);
@@ -202,12 +208,14 @@ void Transport::Update(uint32 diff)
         _positionChangeTimer.Reset(positionUpdateDelay);
         if (IsMoving())
         {
-            float t = CalculateSegmentPos(float(timer) * 0.001f);
+            float t = !justStopped ? CalculateSegmentPos(float(timer) * 0.001f) : 1.0f;
             G3D::Vector3 pos, dir;
             _currentFrame->Spline->evaluate_percent(_currentFrame->Index, t, pos);
             _currentFrame->Spline->evaluate_derivative(_currentFrame->Index, t, dir);
             UpdatePosition(pos.x, pos.y, pos.z, std::atan2(dir.y, dir.x) + float(M_PI));
         }
+        else if (justStopped)
+            UpdatePosition(_currentFrame->Node->Loc.X, _currentFrame->Node->Loc.Y, _currentFrame->Node->Loc.Z, _currentFrame->InitialOrientation);
         else
         {
             /* There are four possible scenarios that trigger loading/unloading passengers:

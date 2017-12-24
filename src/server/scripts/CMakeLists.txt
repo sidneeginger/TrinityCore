@@ -91,7 +91,6 @@ endforeach()
 # Base sources which are used by every script project
 if (USE_SCRIPTPCH)
   set(PRIVATE_PCH_HEADER ScriptPCH.h)
-  set(PRIVATE_PCH_SOURCE ScriptPCH.cpp)
 endif ()
 
 GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
@@ -160,10 +159,11 @@ foreach(SCRIPT_MODULE ${SCRIPT_MODULE_LIST})
     list(APPEND DYNAMIC_SCRIPT_MODULE_PROJECTS ${SCRIPT_MODULE_PROJECT_NAME})
     # Create the script module project
     add_library(${SCRIPT_MODULE_PROJECT_NAME} SHARED
-      ${PRIVATE_PCH_SOURCE}
       ${SCRIPT_MODULE_PRIVATE_SOURCES}
       ${SCRIPT_MODULE_PRIVATE_SCRIPTLOADER})
     target_link_libraries(${SCRIPT_MODULE_PROJECT_NAME}
+      PRIVATE
+        trinity-core-interface
       PUBLIC
         game)
     set_target_properties(${SCRIPT_MODULE_PROJECT_NAME}
@@ -200,11 +200,12 @@ ConfigureScriptLoader("static" SCRIPT_MODULE_PRIVATE_SCRIPTLOADER OFF ${STATIC_S
 
 add_library(scripts STATIC
   ScriptLoader.h
-  ${PRIVATE_PCH_SOURCE}
   ${SCRIPT_MODULE_PRIVATE_SCRIPTLOADER}
   ${PRIVATE_SOURCES})
 
 target_link_libraries(scripts
+  PRIVATE
+    trinity-core-interface
   PUBLIC
     game-interface)
 

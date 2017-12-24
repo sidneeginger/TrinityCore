@@ -30,9 +30,11 @@ at_map_chamber
 EndContentData */
 
 #include "ScriptMgr.h"
+#include "GameObject.h"
+#include "InstanceScript.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "uldaman.h"
-#include "Player.h"
 
 /*######
 ## npc_jadespine_basilisk
@@ -161,4 +163,3 @@ void AddSC_uldaman()
     new go_keystone_chamber();
     new AreaTrigger_at_map_chamber();
 }
-

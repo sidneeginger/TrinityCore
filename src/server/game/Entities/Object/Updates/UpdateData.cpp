@@ -16,10 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Common.h"
-#include "ByteBuffer.h"
-#include "WorldPacket.h"
 #include "UpdateData.h"
+#include "Errors.h"
+#include "WorldPacket.h"
 #include "Opcodes.h"
 
 UpdateData::UpdateData(uint32 map) : m_map(map), m_blockCount(0) { }
@@ -69,4 +68,3 @@ void UpdateData::Clear()
     m_blockCount = 0;
     m_map = 0;
 }
-
